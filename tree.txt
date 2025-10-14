@@ -1,0 +1,264 @@
+.
+├── tree.txt
+├── tests
+│   ├── test_pipeline.py
+│   ├── test_features.py
+│   ├── test_data_loader.py
+│   ├── __pycache__
+│   │   ├── test_pipeline.cpython-313-pytest-7.4.4.pyc
+│   │   ├── test_features.cpython-313-pytest-7.4.4.pyc
+│   │   ├── test_data_loader.cpython-313-pytest-7.4.4.pyc
+│   │   └── conftest.cpython-313-pytest-7.4.4.pyc
+│   ├── {fixtures}
+│   └── conftest.py
+├── TEST_REPORT.md
+├── src
+│   ├── utils
+│   │   ├── seed.py
+│   │   ├── __pycache__
+│   │   │   ├── seed.cpython-313.pyc
+│   │   │   ├── logger.cpython-313.pyc
+│   │   │   ├── __init__.cpython-313.pyc
+│   │   │   └── config.cpython-313.pyc
+│   │   ├── logger.py
+│   │   ├── __init__.py
+│   │   └── config.py
+│   ├── __pycache__
+│   │   └── __init__.cpython-313.pyc
+│   ├── preprocessing
+│   │   ├── __pycache__
+│   │   │   ├── pipeline.cpython-313.pyc
+│   │   │   ├── __init__.cpython-313.pyc
+│   │   │   └── cleaner.cpython-313.pyc
+│   │   ├── pipeline.py
+│   │   ├── __init__.py
+│   │   └── cleaner.py
+│   ├── models
+│   │   ├── tuner.py
+│   │   ├── trainer.py
+│   │   ├── __pycache__
+│   │   │   ├── trainer.cpython-313.pyc
+│   │   │   ├── predictor.cpython-313.pyc
+│   │   │   ├── __init__.cpython-313.pyc
+│   │   │   └── baseline.cpython-313.pyc
+│   │   ├── predictor.py
+│   │   ├── __init__.py
+│   │   └── baseline.py
+│   ├── __init__.py
+│   ├── features
+│   │   ├── transformers.py
+│   │   ├── selector.py
+│   │   ├── __pycache__
+│   │   │   ├── transformers.cpython-313.pyc
+│   │   │   └── __init__.cpython-313.pyc
+│   │   ├── __init__.py
+│   │   └── aggregator.py
+│   ├── evaluation
+│   │   ├── visualizer.py
+│   │   ├── reporter.py
+│   │   ├── __pycache__
+│   │   │   ├── visualizer.cpython-313.pyc
+│   │   │   ├── metrics.cpython-313.pyc
+│   │   │   └── __init__.cpython-313.pyc
+│   │   ├── metrics.py
+│   │   └── __init__.py
+│   └── data
+│       ├── validator.py
+│       ├── schema.py
+│       ├── sampler.py
+│       ├── __pycache__
+│       │   ├── schema.cpython-313.pyc
+│       │   ├── loader.cpython-313.pyc
+│       │   └── __init__.cpython-313.pyc
+│       ├── loader.py
+│       └── __init__.py
+├── scripts
+│   ├── train_tuned.py
+│   ├── train_baseline.py
+│   ├── split_data.py
+│   ├── run_eda.py
+│   └── evaluate.py
+├── RUN_NOW.md
+├── results
+│   ├── training
+│   ├── reports
+│   ├── features
+│   ├── evaluation
+│   └── eda
+│       ├── summary_statistics.csv
+│       ├── feature_distributions.png
+│       ├── feature_correlations.png
+│       ├── class_imbalance.png
+│       └── attack_distribution.png
+├── requirements.txt
+├── README.md
+├── QUICKSTART.md
+├── pyproject.toml
+├── PROJECT_SUMMARY.md
+├── notebooks
+│   └── 01_exploratory_data_analysis.ipynb
+├── models
+├── htmlcov
+│   ├── z_f1b38b22aeb65474_seed_py.html
+│   ├── z_f1b38b22aeb65474_logger_py.html
+│   ├── z_f1b38b22aeb65474___init___py.html
+│   ├── z_f1b38b22aeb65474_config_py.html
+│   ├── z_e5ccf62099f28249_validator_py.html
+│   ├── z_e5ccf62099f28249_schema_py.html
+│   ├── z_e5ccf62099f28249_sampler_py.html
+│   ├── z_e5ccf62099f28249_loader_py.html
+│   ├── z_e5ccf62099f28249___init___py.html
+│   ├── z_e3d496e5189f5be2_transformers_py.html
+│   ├── z_e3d496e5189f5be2_selector_py.html
+│   ├── z_e3d496e5189f5be2___init___py.html
+│   ├── z_e3d496e5189f5be2_aggregator_py.html
+│   ├── z_defad1a87623d8bf_tuner_py.html
+│   ├── z_defad1a87623d8bf_trainer_py.html
+│   ├── z_defad1a87623d8bf_predictor_py.html
+│   ├── z_defad1a87623d8bf___init___py.html
+│   ├── z_defad1a87623d8bf_baseline_py.html
+│   ├── z_a9189dfa9733904a_visualizer_py.html
+│   ├── z_a9189dfa9733904a_reporter_py.html
+│   ├── z_a9189dfa9733904a_metrics_py.html
+│   ├── z_a9189dfa9733904a___init___py.html
+│   ├── z_a615e9671ce82068_pipeline_py.html
+│   ├── z_a615e9671ce82068___init___py.html
+│   ├── z_a615e9671ce82068_cleaner_py.html
+│   ├── z_145eef247bfb46b6___init___py.html
+│   ├── style_cb_6b508a39.css
+│   ├── status.json
+│   ├── keybd_closed_cb_ce680311.png
+│   ├── index.html
+│   ├── function_index.html
+│   ├── favicon_32_cb_58284776.png
+│   ├── coverage_html_cb_6fb7b396.js
+│   └── class_index.html
+├── FIXES_APPLIED.md
+├── experiments
+│   ├── exp_003_tuned_random
+│   ├── exp_002_tuned_grid
+│   └── exp_001_baseline
+├── docs
+│   ├── dataset_description.md
+│   └── architecture.md
+├── docker
+├── demo
+│   ├── requirements_demo.txt
+│   ├── assets
+│   └── app.py
+├── DATA_PREP_INSTRUCTIONS.md
+├── Data
+│   ├── The Bot-IoT Dataset.pdf
+│   ├── Read_Me.pdf
+│   ├── Ground Truth
+│   │   ├── Service_Scan.csv
+│   │   ├── OS_Scan.csv
+│   │   ├── Keylogging.csv
+│   │   ├── DoS_UDP.csv
+│   │   ├── DoS_TCP.csv
+│   │   ├── DoS_HTTP.csv
+│   │   ├── DDoS_UDP.csv
+│   │   ├── DDoS_TCP.csv
+│   │   ├── DDoS_HTTP.csv
+│   │   └── Data_exfiltration.csv
+│   └── Dataset
+│       ├── Features Explanation
+│       │   └── Total Feature Description.xlsx
+│       ├── Entire Dataset
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_Feature_Names.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_9.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_8.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_7.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_74.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_73.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_72.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_71.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_70.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_6.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_69.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_68.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_67.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_66.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_65.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_64.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_63.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_62.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_61.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_60.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_5.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_59.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_58.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_57.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_56.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_55.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_54.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_53.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_52.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_51.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_50.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_4.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_49.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_48.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_47.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_46.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_45.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_44.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_43.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_42.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_41.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_40.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_3.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_39.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_38.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_37.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_36.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_35.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_34.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_33.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_32.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_31.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_30.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_2.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_29.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_28.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_27.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_26.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_25.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_24.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_23.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_22.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_21.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_20.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_1.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_19.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_18.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_17.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_16.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_15.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_14.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_13.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_12.csv
+│       │   ├── UNSW_2018_IoT_Botnet_Dataset_11.csv
+│       │   └── UNSW_2018_IoT_Botnet_Dataset_10.csv
+│       └── 5%
+│           └── 10-best features
+│               ├── UNSW_2018_IoT_Botnet_Final_10_Best.csv
+│               └── split
+│                   ├── UNSW_2018_IoT_Botnet_Final_10_Best_Training.csv
+│                   ├── UNSW_2018_IoT_Botnet_Final_10_Best_Testing.csv
+│                   └── split
+│                       ├── UNSW_2018_IoT_Botnet_Final_10_Best_Training_Training.csv
+│                       └── UNSW_2018_IoT_Botnet_Final_10_Best_Training_Testing.csv
+├── config
+│   ├── preprocessing.yaml
+│   ├── model_tuned.yaml
+│   ├── model_baseline.yaml
+│   └── base_config.yaml
+└── botiot_ddos_detection.egg-info
+    ├── top_level.txt
+    ├── SOURCES.txt
+    ├── requires.txt
+    ├── PKG-INFO
+    └── dependency_links.txt
+
+47 directories, 215 files
