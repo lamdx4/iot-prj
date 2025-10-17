@@ -46,10 +46,22 @@ print(f"XGBoost version: {xgb.__version__}")
 # 1. LOAD STATISTICS AND DETERMINE STRATEGY
 # =============================================================================
 
-STATS_FILE = "/home/lamdx4/Projects/IOT prj/src/dataset_full/stats/batch_statistics.json"
-BATCH_DIR = "/home/lamdx4/Projects/IOT prj/Data/Dataset/merged_batches"
-MODEL_DIR = "/home/lamdx4/Projects/IOT prj/models/full_dataset"
-TEST_PATH = "/home/lamdx4/Projects/IOT prj/Data/Dataset/5%/10-best features/split/UNSW_2018_IoT_Botnet_Final_10_Best_Testing.csv"
+# Auto-detect project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
+
+# Paths relative to project root
+STATS_FILE = os.getenv('STATS_FILE', os.path.join(PROJECT_ROOT, "src/dataset_full/stats/batch_statistics.json"))
+BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
+MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
+TEST_PATH = os.getenv('TEST_PATH', os.path.join(PROJECT_ROOT, "Data/Dataset/5%/10-best features/split/UNSW_2018_IoT_Botnet_Final_10_Best_Testing.csv"))
+
+print("\n📂 Detected Paths:")
+print(f"   Project root: {PROJECT_ROOT}")
+print(f"   Stats file:   {STATS_FILE}")
+print(f"   Batch dir:    {BATCH_DIR}")
+print(f"   Model dir:    {MODEL_DIR}")
+print(f"   Test path:    {TEST_PATH}")
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 

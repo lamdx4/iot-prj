@@ -20,9 +20,19 @@ print("="*80)
 print("STEP 1: MERGE FILES INTO BATCHES")
 print("="*80)
 
-# Paths
-DATA_DIR = "/home/lamdx4/Projects/IOT prj/Data/Dataset/Entire Dataset"
-OUTPUT_DIR = "/home/lamdx4/Projects/IOT prj/Data/Dataset/merged_batches"
+# Auto-detect project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
+
+# Paths relative to project root
+DATA_DIR = os.getenv('DATA_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/Entire Dataset"))
+OUTPUT_DIR = os.getenv('OUTPUT_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
+
+print(f"\n📂 Detected Paths:")
+print(f"   Project root: {PROJECT_ROOT}")
+print(f"   Data dir:     {DATA_DIR}")
+print(f"   Output dir:   {OUTPUT_DIR}")
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Get all files

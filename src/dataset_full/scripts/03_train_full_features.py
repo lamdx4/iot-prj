@@ -45,12 +45,24 @@ print(f"XGBoost version: {xgb.__version__}\n")
 # 1. LOAD STATISTICS & DEFINE STRATEGY
 # ============================================================================
 
-STATS_FILE = "/home/lamdx4/Projects/IOT prj/src/dataset_full/stats/batch_statistics.json"
-BATCH_DIR = "/home/lamdx4/Projects/IOT prj/Data/Dataset/merged_batches"
-MODEL_DIR = "/home/lamdx4/Projects/IOT prj/models/full_dataset"
+# Auto-detect project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
+
+# Paths relative to project root
+STATS_FILE = os.getenv('STATS_FILE', os.path.join(PROJECT_ROOT, "src/dataset_full/stats/batch_statistics.json"))
+BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
+MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
+
+print("\n📂 Detected Paths:")
+print(f"   Project root: {PROJECT_ROOT}")
+print(f"   Stats file:   {STATS_FILE}")
+print(f"   Batch dir:    {BATCH_DIR}")
+print(f"   Model dir:    {MODEL_DIR}")
+
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-print("="*80)
+print("\n" + "="*80)
 print("1. STRATEGY (Based on JSON Analysis)")
 print("="*80)
 

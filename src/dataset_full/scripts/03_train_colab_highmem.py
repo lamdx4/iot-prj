@@ -78,10 +78,19 @@ except:
 # CONFIGURATION
 # ============================================================================
 
-# Adjust these paths if needed
-BATCH_DIR = "merged_batches"  # Or "/content/merged_batches" in Colab
-MODEL_DIR = "models_full"
-STATS_FILE = "batch_statistics.json"  # If available
+# Auto-detect project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
+
+# Paths relative to project root (can be overridden via environment variables)
+BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
+MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
+STATS_FILE = os.getenv('STATS_FILE', os.path.join(PROJECT_ROOT, "src/dataset_full/stats/batch_statistics.json"))
+
+# For Colab: override with simple paths if not in project structure
+if not os.path.exists(BATCH_DIR):
+    BATCH_DIR = "merged_batches"  # Fallback for Colab
+    MODEL_DIR = "models_full"
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -89,9 +98,11 @@ print("\n" + "="*80)
 print("1. CONFIGURATION")
 print("="*80)
 
-print(f"\n📂 Paths:")
-print(f"   Batch dir:  {BATCH_DIR}")
-print(f"   Model dir:  {MODEL_DIR}")
+print(f"\n📂 Detected Paths:")
+print(f"   Project root: {PROJECT_ROOT}")
+print(f"   Batch dir:    {BATCH_DIR}")
+print(f"   Model dir:    {MODEL_DIR}")
+print(f"   Stats file:   {STATS_FILE}")
 
 print(f"\n💡 Strategy:")
 print(f"   Train: batch_01 + batch_04 + batch_05 (30M records)")

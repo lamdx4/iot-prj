@@ -27,9 +27,19 @@ print("="*80)
 print("STEP 2: ANALYZE BATCH FILES")
 print("="*80)
 
-# Paths
-BATCH_DIR = "/home/lamdx4/Projects/IOT prj/Data/Dataset/merged_batches"
-STATS_DIR = "/home/lamdx4/Projects/IOT prj/src/dataset_full/stats"
+# Auto-detect project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
+
+# Paths relative to project root
+BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
+STATS_DIR = os.getenv('STATS_DIR', os.path.join(PROJECT_ROOT, "src/dataset_full/stats"))
+
+print(f"\n📂 Detected Paths:")
+print(f"   Project root: {PROJECT_ROOT}")
+print(f"   Batch dir:    {BATCH_DIR}")
+print(f"   Stats dir:    {STATS_DIR}")
+
 os.makedirs(STATS_DIR, exist_ok=True)
 
 # Get all batch files
