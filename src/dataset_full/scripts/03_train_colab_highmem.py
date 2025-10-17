@@ -117,7 +117,7 @@ print("\n" + "="*80)
 print("2. LOADING TRAINING DATA")
 print("="*80)
 
-train_batches = ['batch_01', 'batch_04', 'batch_05']
+train_batches = ['batch_01', 'batch_04']  # batch_05 removed to save ~8GB RAM
 dfs_train = []
 
 for batch_name in train_batches:
@@ -157,11 +157,11 @@ df_batch02 = pd.read_csv(test_batch_file, low_memory=False)
 print(f"✅ {len(df_batch02):,} records")
 
 # Sample 1M
-print(f"\n🔧 Sampling 1M from batch_02...")
+print(f"\n🔧 Sampling 300K from batch_02 (RAM optimized)...")
 if len(df_batch02) > 1000000:
     df_test, _ = train_test_split(
         df_batch02,
-        train_size=1000000,
+        train_size=300000,
         random_state=42,
         stratify=df_batch02['category']
     )
@@ -577,6 +577,10 @@ try:
     print_memory_usage()
 except:
     pass
+
+print("\n💡 To generate visualizations (charts), run:")
+print(f"   python {os.path.join(SCRIPT_DIR, '05_visualize_results.py')}")
+print(f"   (This will read metrics from {metrics_file})")
 
 print("\n" + "="*80)
 
