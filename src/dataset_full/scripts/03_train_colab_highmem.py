@@ -62,8 +62,23 @@ try:
     import subprocess
     gpu_info = subprocess.check_output(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader']).decode()
     print(f"🚀 GPU detected: {gpu_info.strip()}")
+    
+    # Get GPU memory
+    gpu_mem_gb = int(gpu_info.split(',')[1].strip().split()[0]) / 1024
+    print(f"   GPU Memory: {gpu_mem_gb:.1f} GB")
+    
     USE_GPU = True
     TREE_METHOD = "gpu_hist"
+    
+    # Optimize for GPU (especially A100)
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    
+    # Force XGBoost to use all GPU memory
+    if 'A100' in gpu_info or 'V100' in gpu_info:
+        print(f"   🚀 Detected high-end GPU! Optimizing for maximum throughput...")
+        # For large datasets, increase GPU cache
+        os.environ['XGBOOST_GPU_SINGLE_PRECISION_HISTOGRAM'] = '1'
+    
 except:
     print("⚠️  No GPU detected, using CPU")
     USE_GPU = False
@@ -298,13 +313,24 @@ model_s1 = XGBClassifier(
     predictor="gpu_predictor" if USE_GPU else "auto",
     random_state=42, eval_metric='logloss',
     early_stopping_rounds=20, 
-    n_jobs=1 if USE_GPU else -1  # GPU handles parallelism
+    n_jobs=1 if USE_GPU else -1,
+    # GPU optimization
+    max_bin=512 if USE_GPU else 256,  # More bins = more GPU usage
+    grow_policy='depthwise' if USE_GPU else 'depthwise',  # Better for GPU
 )
 
 model_s1.fit(X_train_s1_res, y_train_s1_res, 
              eval_set=[(X_val_s1, y_val_s1)], verbose=False)
 
 print(f"   ✅ Best iteration: {model_s1.best_iteration}, Score: {model_s1.best_score:.4f}")
+
+# Check GPU usage after training
+if USE_GPU:
+    try:
+        gpu_usage = subprocess.check_output(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,noheader,nounits']).decode().strip()
+        print(f"   💾 GPU Memory Used: {float(gpu_usage)/1024:.1f} GB")
+    except:
+        pass
 
 # Evaluate
 y_pred_s1 = model_s1.predict(X_test)
@@ -410,7 +436,10 @@ model_s2 = XGBClassifier(
     predictor="gpu_predictor" if USE_GPU else "auto",
     random_state=42, eval_metric='mlogloss',
     early_stopping_rounds=20, 
-    n_jobs=1 if USE_GPU else -1
+    n_jobs=1 if USE_GPU else -1,
+    # GPU optimization
+    max_bin=512 if USE_GPU else 256,  # More bins = more GPU usage
+    grow_policy='depthwise' if USE_GPU else 'depthwise',  # Better for GPU
 )
 
 model_s2.fit(X_train_s2_res, y_train_s2_res,
@@ -418,6 +447,14 @@ model_s2.fit(X_train_s2_res, y_train_s2_res,
              eval_set=[(X_val_s2, y_val_s2)], verbose=False)
 
 print(f"   ✅ Best iteration: {model_s2.best_iteration}, Score: {model_s2.best_score:.4f}")
+
+# Check GPU usage after training
+if USE_GPU:
+    try:
+        gpu_usage = subprocess.check_output(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,noheader,nounits']).decode().strip()
+        print(f"   💾 GPU Memory Used: {float(gpu_usage)/1024:.1f} GB")
+    except:
+        pass
 
 # Evaluate
 y_pred_s2 = model_s2.predict(X_test_s2)
