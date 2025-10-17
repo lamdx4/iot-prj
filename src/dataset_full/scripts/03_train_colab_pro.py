@@ -435,14 +435,56 @@ for i in range(len(X_test)):
     final_true_labels.append(true_cat)
 
 overall_acc = accuracy_score(final_true_labels, final_predictions)
-print(f"\n📊 Overall Accuracy: {overall_acc:.4f}")
+print(f"\n📊 Overall Accuracy: {overall_acc:.6f} ({overall_acc*100:.2f}%)")
 
 all_categories = ['Normal'] + sorted([k for k in attack_mapping.keys()])
+
+# Confusion Matrix
+cm_overall = confusion_matrix(final_true_labels, final_predictions, labels=all_categories)
+
+print(f"\n" + "="*80)
+print("CONFUSION MATRIX (Detailed)")
+print("="*80)
+print(f"\n{'':15s} " + " ".join([f"{c:>10s}" for c in all_categories]))
+print("─" * (15 + 11 * len(all_categories)))
+for i, true_cat in enumerate(all_categories):
+    row = f"{true_cat:15s} " + " ".join([f"{cm_overall[i,j]:10d}" for j in range(len(all_categories))])
+    print(row)
+
+# Per-Category Accuracy
+print(f"\n" + "="*80)
+print("PER-CATEGORY ACCURACY")
+print("="*80)
+for i, cat in enumerate(all_categories):
+    total = cm_overall[i].sum()
+    correct = cm_overall[i, i]
+    acc = correct / total if total > 0 else 0
+    print(f"   {cat:15s}: {acc:.6f} ({acc*100:6.2f}%) - {correct:,}/{total:,}")
+
+# Per-Category Detailed Metrics
+print(f"\n" + "="*80)
+print("PER-CATEGORY DETAILED METRICS")
+print("="*80)
+for i, cat in enumerate(all_categories):
+    total = cm_overall[i].sum()
+    pred_total = cm_overall[:, i].sum()
+    correct = cm_overall[i, i]
+    
+    precision = correct / pred_total if pred_total > 0 else 0
+    recall = correct / total if total > 0 else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    
+    print(f"\n   {cat}:")
+    print(f"      Precision: {precision:.6f}")
+    print(f"      Recall:    {recall:.6f}")
+    print(f"      F1-Score:  {f1:.6f}")
+    print(f"      Support:   {total:,}")
+
 print(f"\n{'='*80}")
 print("CLASSIFICATION REPORT")
 print("="*80)
 print("\n", classification_report(final_true_labels, final_predictions,
-                                  labels=all_categories, zero_division=0))
+                                  labels=all_categories, zero_division=0, digits=4))
 
 # ============================================================================
 # SAVE MODELS
@@ -460,7 +502,80 @@ joblib.dump(label_encoders, os.path.join(MODEL_DIR, f"encoders_pro_{timestamp}.p
 joblib.dump(attack_mapping, os.path.join(MODEL_DIR, f"mapping_pro_{timestamp}.pkl"))
 joblib.dump(feature_cols, os.path.join(MODEL_DIR, f"features_pro_{timestamp}.pkl"))
 
+# Save comprehensive training metrics
+training_metrics = {
+    'metadata': {
+        'timestamp': timestamp,
+        'trained_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'version': 'pro_optimized_25gb',
+        'train_samples': len(df_train),
+        'test_samples': len(df_test),
+        'num_features': len(feature_cols),
+        'features': feature_cols,
+        'attack_types': list(attack_mapping.keys())
+    },
+    'training_data': {
+        'total_records': len(df_train),
+        'normal_count': int((df_train['is_attack']==0).sum()),
+        'attack_count': int((df_train['is_attack']==1).sum()),
+        'category_distribution': df_train['category'].value_counts().to_dict()
+    },
+    'test_data': {
+        'total_records': len(df_test),
+        'normal_count': int((df_test['is_attack']==0).sum()),
+        'attack_count': int((df_test['is_attack']==1).sum()),
+        'category_distribution': df_test['category'].value_counts().to_dict()
+    },
+    'stage1': {
+        'accuracy': float(accuracy_score(y_test_binary, y_pred_s1)),
+        'precision': float(precision_score(y_test_binary, y_pred_s1, zero_division=0)),
+        'recall': float(recall_score(y_test_binary, y_pred_s1, zero_division=0)),
+        'f1_score': float(f1_score(y_test_binary, y_pred_s1, zero_division=0)),
+        'roc_auc': float(roc_auc_score(y_test_binary, y_pred_s1_proba)) if len(np.unique(y_test_binary)) > 1 else None,
+        'best_iteration': int(model_s1.best_iteration),
+        'best_score': float(model_s1.best_score)
+    },
+    'stage2': {
+        'accuracy': float(accuracy_score(y_test_s2, y_pred_s2)),
+        'precision_weighted': float(precision_score(y_test_s2, y_pred_s2, average='weighted', zero_division=0)),
+        'recall_weighted': float(recall_score(y_test_s2, y_pred_s2, average='weighted', zero_division=0)),
+        'f1_weighted': float(f1_score(y_test_s2, y_pred_s2, average='weighted', zero_division=0)),
+        'best_iteration': int(model_s2.best_iteration),
+        'best_score': float(model_s2.best_score)
+    },
+    'overall': {
+        'accuracy': float(overall_acc),
+        'confusion_matrix': cm_overall.tolist(),
+        'per_category_metrics': {}
+    }
+}
+
+# Add per-category metrics
+for i, cat in enumerate(all_categories):
+    total = cm_overall[i].sum()
+    pred_total = cm_overall[:, i].sum()
+    correct = cm_overall[i, i]
+    
+    precision = float(correct / pred_total) if pred_total > 0 else 0.0
+    recall = float(correct / total) if total > 0 else 0.0
+    f1 = float(2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+    
+    training_metrics['overall']['per_category_metrics'][cat] = {
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1,
+        'support': int(total),
+        'correct': int(correct)
+    }
+
+# Save metrics
+metrics_file = os.path.join(MODEL_DIR, f"training_metrics_pro_{timestamp}.json")
+with open(metrics_file, 'w') as f:
+    json.dump(training_metrics, f, indent=2)
+
 print(f"\n✅ Saved to: {MODEL_DIR}/")
+print(f"   • Models: stage1_pro_{timestamp}.pkl, stage2_pro_{timestamp}.pkl")
+print(f"   • Metrics: training_metrics_pro_{timestamp}.json")
 
 print("\n" + "="*80)
 print("✅ COMPLETED!")
