@@ -62,13 +62,23 @@ import glob
 model_files = glob.glob(os.path.join(MODEL_DIR, "stage1_*.pkl"))
 if not model_files:
     print("❌ No models found! Please run training first.")
+    print(f"   Expected directory: {MODEL_DIR}")
+    print(f"   Files in directory:")
+    try:
+        for f in os.listdir(MODEL_DIR):
+            print(f"      {f}")
+    except:
+        print(f"      Directory does not exist!")
     exit(1)
 
-# Get latest timestamp
+# Get latest timestamp - FIXED!
 latest_stage1 = sorted(model_files)[-1]
-timestamp = latest_stage1.split('_')[-1].replace('.pkl', '')
+# Extract timestamp: stage1_20251017_123456.pkl -> 20251017_123456
+basename = os.path.basename(latest_stage1)  # stage1_20251017_123456.pkl
+timestamp = basename.replace('stage1_', '').replace('.pkl', '')  # 20251017_123456
 
 print(f"\n📂 Loading models with timestamp: {timestamp}")
+print(f"   Latest model: {os.path.basename(latest_stage1)}")
 
 model_s1 = joblib.load(os.path.join(MODEL_DIR, f"stage1_{timestamp}.pkl"))
 model_s2 = joblib.load(os.path.join(MODEL_DIR, f"stage2_{timestamp}.pkl"))
