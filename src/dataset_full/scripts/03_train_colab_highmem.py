@@ -436,22 +436,40 @@ print("\n" + "="*80)
 print("COMBINED PIPELINE EVALUATION")
 print("="*80)
 
-final_predictions = []
-final_true_labels = []
+# Vectorized approach - MUCH FASTER!
+print(f"\n🔮 Combining predictions (vectorized)...")
 
-for i in range(len(X_test)):
-    true_cat = df_test.iloc[i]['category']
-    is_attack = y_pred_s1[i]
+# Initialize with 'Normal' for all predicted as non-attack
+final_predictions = np.where(y_pred_s1 == 0, 'Normal', None).astype(object)
+
+# Batch predict for all attacks
+attack_mask = (y_pred_s1 == 1)
+num_attacks = attack_mask.sum()
+
+if num_attacks > 0:
+    print(f"   Processing {num_attacks:,} detected attacks...")
     
-    if is_attack == 0:
-        prediction = 'Normal'
+    # Get attack samples
+    if isinstance(X_test, pd.DataFrame):
+        attack_samples = X_test[attack_mask]
     else:
-        sample = X_test.iloc[i:i+1]
-        attack_type = model_s2.predict(sample)[0]
-        prediction = [k for k, v in attack_mapping.items() if v == attack_type][0]
+        attack_samples = X_test[attack_mask]
     
-    final_predictions.append(prediction)
-    final_true_labels.append(true_cat)
+    # Batch prediction - MUCH faster than loop!
+    attack_types = model_s2.predict(attack_samples)
+    
+    # Map attack type labels to names
+    reverse_mapping = {v: k for k, v in attack_mapping.items()}
+    attack_names = np.array([reverse_mapping[t] for t in attack_types])
+    
+    # Fill in attack predictions
+    final_predictions[attack_mask] = attack_names
+    
+    print(f"   ✅ Batch prediction completed")
+
+# Convert to list and get true labels
+final_predictions = list(final_predictions)
+final_true_labels = df_test['category'].tolist()
 
 overall_acc = accuracy_score(final_true_labels, final_predictions)
 print(f"\n📊 Overall Accuracy: {overall_acc:.6f} ({overall_acc*100:.2f}%)")
