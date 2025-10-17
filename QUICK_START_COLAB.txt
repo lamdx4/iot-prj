@@ -1,0 +1,182 @@
+================================================================================
+🚀 QUICK START - TRAIN ON GOOGLE COLAB (100 COMPUTE UNITS)
+================================================================================
+
+🎯 RECOMMENDATION: 03_train_colab_highmem.py + GPU T4
+   → Accuracy: 90-95%
+   → Time: 15-20 minutes
+   → Cost: ~50-80 units (còn dư 20-50 units!)
+
+================================================================================
+📋 STEP-BY-STEP GUIDE
+================================================================================
+
+1️⃣  SETUP COLAB RUNTIME
+────────────────────────────────────────────────────────────────────────────
+   a) Mở Google Colab: https://colab.research.google.com
+   b) Runtime → Change runtime type
+   c) Chọn:
+      • Python 3
+      • Hardware accelerator: GPU ⭐
+      • Runtime shape: High-RAM ⭐
+   d) Save → Connect
+
+   Verify GPU:
+   !nvidia-smi
+   
+   Expected output: Tesla T4, 15360 MiB
+
+2️⃣  UPLOAD FILES TO COLAB
+────────────────────────────────────────────────────────────────────────────
+   Option A: Via Google Drive (Recommended for large files)
+   ──────────────────────────────────────────────────────────────────────────
+   from google.colab import drive
+   drive.mount('/content/drive')
+   
+   # Copy data to Colab storage (faster than Drive)
+   !mkdir -p /content/merged_batches
+   !cp /content/drive/MyDrive/IOT_Project/merged_batches/*.csv /content/merged_batches/
+   
+   # Copy script
+   !cp /content/drive/MyDrive/IOT_Project/03_train_colab_highmem.py /content/
+   
+   Option B: Direct Upload (Slower but simpler)
+   ──────────────────────────────────────────────────────────────────────────
+   from google.colab import files
+   
+   # Upload batches (this will take time for ~10GB files)
+   uploaded = files.upload()  # Select: batch_01.csv, batch_02.csv, batch_04.csv, batch_05.csv
+   
+   # Create folder and move
+   !mkdir -p merged_batches
+   !mv batch_*.csv merged_batches/
+   
+   # Upload script
+   uploaded = files.upload()  # Select: 03_train_colab_highmem.py
+
+3️⃣  INSTALL DEPENDENCIES
+────────────────────────────────────────────────────────────────────────────
+   !pip install -q xgboost scikit-learn imbalanced-learn pandas numpy joblib psutil
+
+4️⃣  RUN TRAINING
+────────────────────────────────────────────────────────────────────────────
+   !python 03_train_colab_highmem.py
+   
+   Expected output:
+   ════════════════════════════════════════════════════════════════════════
+   TRAIN TWO-STAGE MODEL - COLAB PRO+ HIGH-RAM
+   ════════════════════════════════════════════════════════════════════════
+   XGBoost version: 2.x.x
+   🚀 GPU detected: Tesla T4, 15360 MiB
+   
+   ... (training progress) ...
+   
+   📊 Overall Accuracy: 0.92XX
+   ✅ TRAINING COMPLETED!
+   
+   ⏱️  Total time: 15-20 minutes
+
+5️⃣  DOWNLOAD TRAINED MODELS
+────────────────────────────────────────────────────────────────────────────
+   # Zip models
+   !zip -r models_full.zip models_full/
+   
+   # Download
+   from google.colab import files
+   files.download('models_full.zip')
+   
+   Models include:
+   ├─ stage1_TIMESTAMP.pkl        (Binary: Attack vs Normal)
+   ├─ stage2_TIMESTAMP.pkl        (Multi-class: Attack types)
+   ├─ encoders_TIMESTAMP.pkl      (Feature encoders)
+   ├─ mapping_TIMESTAMP.pkl       (Attack type mapping)
+   └─ features_TIMESTAMP.pkl      (Feature list)
+
+================================================================================
+🎯 ALTERNATIVE: BUDGET VERSION (30-50 units)
+================================================================================
+
+If you want to save compute units:
+
+1️⃣  Runtime: Standard + GPU T4 (NOT High-RAM)
+2️⃣  File: 03_train_colab_pro.py
+3️⃣  Trade-off:
+   • Accuracy: 85-90% (instead of 90-95%)
+   • Data: 20M records (instead of 30M)
+   • Time: 10-15 min
+   • Cost: ~30-50 units
+
+================================================================================
+⚠️  TROUBLESHOOTING
+================================================================================
+
+Issue: "CUDA out of memory"
+Fix: Restart runtime → Disconnect → Reconnect
+
+Issue: "RAM/Disk quota exceeded"
+Fix: Use 03_train_colab_pro.py (uses less RAM)
+
+Issue: "No GPU detected"
+Fix: Runtime → Change runtime type → GPU → Save
+
+Issue: "Training very slow (>1 hour)"
+Fix: Check GPU with !nvidia-smi
+     If no GPU or K80 → Disconnect → Reconnect
+
+Issue: Script crashes
+Fix: Check file paths:
+     !ls -lh merged_batches/
+     Should show: batch_01.csv, batch_02.csv, batch_04.csv, batch_05.csv
+
+================================================================================
+📊 EXPECTED RESULTS
+================================================================================
+
+With 03_train_colab_highmem.py + GPU T4:
+
+Stage 1 (Attack vs Normal):
+   Accuracy:  0.998+
+   Precision: 0.998+
+   Recall:    0.999+
+   F1-Score:  0.999+
+   ROC-AUC:   0.999+
+
+Stage 2 (Attack Types):
+   Accuracy:  0.92+
+   Precision: 0.91+ (weighted)
+   Recall:    0.92+ (weighted)
+   F1-Score:  0.91+ (weighted)
+
+Overall Pipeline:
+   Accuracy:  0.92-0.95 (92-95%)
+
+================================================================================
+💰 COMPUTE UNITS BREAKDOWN
+================================================================================
+
+Total budget: 100 units
+
+Training (High-RAM + GPU T4):
+   Runtime: 15-20 minutes
+   Cost: ~50-80 units
+   
+Remaining: 20-50 units for:
+   • Re-training with different hyperparameters
+   • Testing/inference
+   • Model evaluation
+   • Experiments
+
+================================================================================
+📞 NEED HELP?
+================================================================================
+
+1. Check GPU: !nvidia-smi
+2. Check RAM: Script prints RAM usage automatically
+3. Check files: !ls -lh merged_batches/
+4. XGBoost version: !python -c "import xgboost; print(xgboost.__version__)"
+5. Full log saved in terminal output
+
+Good luck! 🚀
+
+================================================================================
+

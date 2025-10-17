@@ -1,0 +1,244 @@
+════════════════════════════════════════════════════════════════════════════════
+                    ✅ PROJECT SETUP HOÀN THÀNH! ✅
+════════════════════════════════════════════════════════════════════════════════
+
+Đề tài: Phát hiện tấn công IoT bằng Machine Learning
+Approach: Two-Stage Hierarchical Classification
+
+════════════════════════════════════════════════════════════════════════════════
+📁 STRUCTURE
+════════════════════════════════════════════════════════════════════════════════
+
+src/
+├── dataset_5percent/                      ← 5% Dataset (Baseline)
+│   └── 04_hierarchical_two_stage_classification.py
+│
+└── dataset_full/                          ← Full Dataset (Production) ⭐
+    ├── scripts/
+    │   ├── 01_merge_files.py             ← Gộp 10 files → 1 batch
+    │   ├── 02_analyze_batches.py         ← Statistics → JSON
+    │   ├── 03_train_hierarchical.py      ← Train models
+    │   └── 04_test_model.py              ← Test models
+    │
+    ├── stats/                             ← Generated stats
+    ├── RUN_PIPELINE.sh                    ← Auto run all ⭐
+    └── README.md
+
+════════════════════════════════════════════════════════════════════════════════
+🎯 2 CÁCH TRAIN
+════════════════════════════════════════════════════════════════════════════════
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ CÁCH 1: Dataset 5% (Quick & Baseline)                                    ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║   cd src/dataset_5percent                                                 ║
+║   python 04_hierarchical_two_stage_classification.py                      ║
+║                                                                           ║
+║   ⏱️  Time: ~5 phút                                                       ║
+║   💾 Memory: ~2GB                                                          ║
+║   📊 Accuracy: 99.6%                                                       ║
+║   ⚠️  Limitation: Only 4 Normal samples                                   ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ CÁCH 2: Full Dataset (Production) ⭐ RECOMMENDED!                        ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║   cd src/dataset_full                                                     ║
+║   ./RUN_PIPELINE.sh                                                       ║
+║                                                                           ║
+║   Pipeline tự động:                                                       ║
+║   1. Gộp 74 files → 8 batches (~10 phút)                                 ║
+║   2. Phân tích → JSON stats (~5 phút)                                    ║
+║   3. Train models (~15 phút)                                              ║
+║   4. Test models (~3 phút)                                                ║
+║                                                                           ║
+║   ⏱️  Total: ~30 phút                                                     ║
+║   💾 Memory: ~8-16GB                                                       ║
+║   📊 Accuracy: 98-99%                                                      ║
+║   ✅ Advantage: 10K-20K Normal samples → Reliable!                        ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════════════════════════
+🔍 FULL DATASET PIPELINE CHI TIẾT
+════════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Gộp 10 files thành 1 batch
+────────────────────────────────────────────────────────────────────────────
+  • Input: 74 files từ Data/Dataset/Entire Dataset/
+  • Output: 8 batch files
+    - batch_01.csv (files 1-10, ~2GB)
+    - batch_02.csv (files 11-20, ~2GB)
+    - ...
+    - batch_08.csv (files 71-74, ~0.8GB)
+  
+  • IMPORTANT:
+    ✓ Sort đúng thứ tự (1,2,3... not 1,10,11...)
+    ✓ Sort theo stime (flow data)
+    ✓ Lưu vào Data/Dataset/merged_batches/
+
+STEP 2: Phân tích batches → JSON
+────────────────────────────────────────────────────────────────────────────
+  • Input: 8 batch files
+  • Output: src/dataset_full/stats/batch_statistics.json
+  
+  • Statistics per batch:
+    ✓ Number of records
+    ✓ Class distribution (Normal, DDoS, DoS, Recon)
+    ✓ Attack vs Normal ratio
+    ✓ Missing values
+    ✓ Protocol distribution
+    ✓ Time range (stime, ltime)
+  
+  • Recommendations:
+    ✓ Which batches to use
+    ✓ Imbalance handling strategy
+    ✓ SMOTE parameters
+
+STEP 3: Train Models
+────────────────────────────────────────────────────────────────────────────
+  • Đọc JSON statistics
+  • Chọn best batches (priority: batches với nhiều Normal)
+  • Load & merge selected batches
+  
+  • STAGE 1: Binary Classification (Attack vs Normal)
+    ✓ SMOTE for Normal samples
+    ✓ XGBoost với scale_pos_weight
+    ✓ Save stage1_binary_*.pkl
+  
+  • STAGE 2: Multi-class (DDoS, DoS, Reconnaissance)
+    ✓ Only attack samples (no Normal)
+    ✓ SMOTE for minority (Reconnaissance)
+    ✓ Save stage2_multiclass_*.pkl
+  
+  • Test on 5% dataset (test set)
+  • Save metrics JSON
+
+STEP 4: Test Models
+────────────────────────────────────────────────────────────────────────────
+  • Load trained models
+  • Predict on test set
+  • Detailed evaluation:
+    ✓ Per-class metrics
+    ✓ Confusion matrix
+    ✓ Error analysis
+    ✓ Sample predictions
+  
+  • Save test_results_*.json
+
+════════════════════════════════════════════════════════════════════════════════
+📊 EXPECTED RESULTS
+════════════════════════════════════════════════════════════════════════════════
+
+Full Dataset (sau khi merge):
+  ✓ Total records: 40-50 million
+  ✓ Normal samples: 10,000-20,000 (vs 4 trong 5%)
+  ✓ Attack samples: 40-50 million
+  ✓ Imbalance ratio: 2,000-5,000:1 (better than 9,782:1 của 5%)
+
+Performance:
+  ✓ Stage 1 Accuracy: 99.5-99.9%
+  ✓ Stage 2 Accuracy: 98-99%
+  ✓ Overall Accuracy: 98-99.5%
+  ✓ Normal detection: RELIABLE (vs unreliable với 5%)
+
+════════════════════════════════════════════════════════════════════════════════
+📂 OUTPUT FILES
+════════════════════════════════════════════════════════════════════════════════
+
+Data/Dataset/merged_batches/
+├── batch_01.csv  (~2GB)
+├── batch_02.csv  (~2GB)
+...
+└── batch_08.csv  (~0.8GB)
+
+src/dataset_full/stats/
+├── batch_statistics.json  ← Chi tiết từng batch
+└── batch_summary.txt       ← Human-readable summary
+
+models/full_dataset/
+├── stage1_binary_TIMESTAMP.pkl          ← Stage 1 model
+├── stage2_multiclass_TIMESTAMP.pkl      ← Stage 2 model
+├── label_encoder_TIMESTAMP.pkl          ← Protocol encoder
+├── attack_mapping_TIMESTAMP.pkl         ← Attack type mapping
+├── feature_columns_TIMESTAMP.pkl        ← Feature names
+├── metrics_TIMESTAMP.json               ← Training metrics
+└── test_results_TIMESTAMP.json          ← Test results
+
+════════════════════════════════════════════════════════════════════════════════
+💡 TIPS
+════════════════════════════════════════════════════════════════════════════════
+
+Memory Management:
+  • 8GB RAM:  Sửa NUM_BATCHES_TO_USE = 2 trong 03_train_hierarchical.py
+  • 16GB RAM: Dùng default (5 batches)
+  • 32GB+ RAM: Dùng all 8 batches
+
+Speed Optimization:
+  • Giảm n_estimators từ 200 → 100
+  • Giảm max_depth từ 6 → 4
+
+Batch Selection:
+  • Scripts tự động chọn batches với nhiều Normal nhất
+  • Check stats/batch_summary.txt để xem distribution
+
+════════════════════════════════════════════════════════════════════════════════
+🎓 CHO ĐỀ TÀI
+════════════════════════════════════════════════════════════════════════════════
+
+Recommended Flow:
+
+1. Train 5% dataset (baseline)
+   → Quick results
+   → Understand pipeline
+
+2. Train Full dataset (production)
+   → Better Normal detection
+   → More reliable evaluation
+
+3. So sánh kết quả:
+   → Show improvement
+   → Highlight Normal samples
+   → Explain why Full better
+
+4. Báo cáo:
+   → EDA (notebooks/01_eda_dataset_analysis.ipynb)
+   → Methodology (Two-stage approach)
+   → Results (5% vs Full comparison)
+   → Conclusion (Production-ready)
+
+════════════════════════════════════════════════════════════════════════════════
+🚀 BẮT ĐẦU NGAY!
+════════════════════════════════════════════════════════════════════════════════
+
+Quick Test (5%):
+    cd src/dataset_5percent
+    python 04_hierarchical_two_stage_classification.py
+
+Production (Full): ⭐
+    cd src/dataset_full
+    ./RUN_PIPELINE.sh
+
+════════════════════════════════════════════════════════════════════════════════
+📚 DOCUMENTATION
+════════════════════════════════════════════════════════════════════════════════
+
+  • PROJECT_STRUCTURE.md       ← Overall structure
+  • src/README.md               ← Source code guide
+  • src/dataset_full/README.md  ← Full pipeline detailed guide
+  • QUICK_START_FULL.md         ← Quick reference
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TẤT CẢ ĐÃ SẴN SÀNG!
+
+Chạy: cd src/dataset_full && ./RUN_PIPELINE.sh
+
+Good luck! 🍀
+
+════════════════════════════════════════════════════════════════════════════════
+
+

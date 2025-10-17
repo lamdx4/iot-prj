@@ -1,0 +1,327 @@
+{
+  "metadata": {
+    "created_at": "2025-10-17 11:21:59",
+    "num_batches": 8,
+    "batch_dir": "/home/lamdx4/Projects/IOT prj/Data/Dataset/merged_batches"
+  },
+  "batches": {
+    "batch_01": {
+      "file": "batch_01",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1964.7103118896484,
+      "category_distribution": {
+        "DoS": 8169390,
+        "Reconnaissance": 1821639,
+        "Normal": 7384,
+        "Theft": 1587
+      },
+      "num_normal": 7384,
+      "num_attacks": 9992616,
+      "normal_percentage": 0.07383999999999999,
+      "attack_percentage": 99.92616,
+      "imbalance_ratio": 1353.2795232936078,
+      "missing_values": {
+        "total": 60002264,
+        "percentage": 17.143504
+      },
+      "time_range": {
+        "stime_min": 1526344031.66514,
+        "stime_max": 1529381833.932704,
+        "ltime_min": 1526344227.077939,
+        "ltime_max": 1529381834.50862,
+        "duration_seconds": 3037802.2675640583
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "tcp": 9915647,
+        "udp": 51424,
+        "icmp": 31723,
+        "arp": 1129,
+        "ipv6-icmp": 74,
+        "igmp": 2,
+        "rarp": 1
+      }
+    },
+    "batch_02": {
+      "file": "batch_02",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1942.4696378707886,
+      "category_distribution": {
+        "DoS": 9999662,
+        "Normal": 338
+      },
+      "num_normal": 338,
+      "num_attacks": 9999662,
+      "normal_percentage": 0.00338,
+      "attack_percentage": 99.99662000000001,
+      "imbalance_ratio": 29584.798816568047,
+      "missing_values": {
+        "total": 60000596,
+        "percentage": 17.14302742857143
+      },
+      "time_range": {
+        "stime_min": 1528083001.410807,
+        "stime_max": 1528085616.606061,
+        "ltime_min": 1528083004.103117,
+        "ltime_max": 1528085640.011635,
+        "duration_seconds": 2615.195254087448
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "udp": 5823239,
+        "tcp": 4176373,
+        "arp": 298,
+        "icmp": 89,
+        "ipv6-icmp": 1
+      }
+    },
+    "batch_03": {
+      "file": "batch_03",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1953.4805431365967,
+      "category_distribution": {
+        "DoS": 9999655,
+        "Normal": 345
+      },
+      "num_normal": 345,
+      "num_attacks": 9999655,
+      "normal_percentage": 0.00345,
+      "attack_percentage": 99.99655,
+      "imbalance_ratio": 28984.507246376812,
+      "missing_values": {
+        "total": 60000532,
+        "percentage": 17.143009142857142
+      },
+      "time_range": {
+        "stime_min": 1528085616.606061,
+        "stime_max": 1528086804.151189,
+        "ltime_min": 1528085620.75036,
+        "ltime_max": 1528086840.070141,
+        "duration_seconds": 1187.545128107071
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "udp": 9999391,
+        "arp": 266,
+        "tcp": 193,
+        "icmp": 148,
+        "ipv6-icmp": 2
+      }
+    },
+    "batch_04": {
+      "file": "batch_04",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1950.1291227340698,
+      "category_distribution": {
+        "DDoS": 5163128,
+        "DoS": 4836487,
+        "Normal": 385
+      },
+      "num_normal": 385,
+      "num_attacks": 9999615,
+      "normal_percentage": 0.00385,
+      "attack_percentage": 99.99615,
+      "imbalance_ratio": 25973.025974025975,
+      "missing_values": {
+        "total": 60000610,
+        "percentage": 17.14303142857143
+      },
+      "time_range": {
+        "stime_min": 1528086804.15119,
+        "stime_max": 1528105414.709753,
+        "ltime_min": 1528086815.852526,
+        "ltime_max": 1528105801.19764,
+        "duration_seconds": 18610.558562994003
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "tcp": 5163183,
+        "udp": 4836436,
+        "arp": 305,
+        "icmp": 72,
+        "ipv6-icmp": 4
+      }
+    },
+    "batch_05": {
+      "file": "batch_05",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1943.2966833114624,
+      "category_distribution": {
+        "DDoS": 9999674,
+        "Normal": 326
+      },
+      "num_normal": 326,
+      "num_attacks": 9999674,
+      "normal_percentage": 0.00326,
+      "attack_percentage": 99.99673999999999,
+      "imbalance_ratio": 30673.84662576687,
+      "missing_values": {
+        "total": 60000538,
+        "percentage": 17.14301085714286
+      },
+      "time_range": {
+        "stime_min": 1528096265.247453,
+        "stime_max": 1528097565.815973,
+        "ltime_min": 1528096270.111964,
+        "ltime_max": 1528097620.53052,
+        "duration_seconds": 1300.5685200691223
+      },
+      "numeric_features": 28,
+      "categorical_features": 7,
+      "protocol_distribution": {
+        "tcp": 9999598,
+        "arp": 269,
+        "udp": 130,
+        "ipv6-icmp": 3
+      }
+    },
+    "batch_06": {
+      "file": "batch_06",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1963.9743719100952,
+      "category_distribution": {
+        "DDoS": 9999682,
+        "Normal": 318
+      },
+      "num_normal": 318,
+      "num_attacks": 9999682,
+      "normal_percentage": 0.00318,
+      "attack_percentage": 99.99682,
+      "imbalance_ratio": 31445.540880503144,
+      "missing_values": {
+        "total": 60000426,
+        "percentage": 17.142978857142857
+      },
+      "time_range": {
+        "stime_min": 1528097565.815977,
+        "stime_max": 1528099706.618064,
+        "ltime_min": 1528097574.966109,
+        "ltime_max": 1528099724.072072,
+        "duration_seconds": 2140.802086830139
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "udp": 5595061,
+        "tcp": 4404639,
+        "arp": 213,
+        "icmp": 86,
+        "ipv6-icmp": 1
+      }
+    },
+    "batch_07": {
+      "file": "batch_07",
+      "num_records": 10000000,
+      "num_features": 35,
+      "file_size_mb": 1937.0489339828491,
+      "category_distribution": {
+        "DDoS": 9999667,
+        "Normal": 333
+      },
+      "num_normal": 333,
+      "num_attacks": 9999667,
+      "normal_percentage": 0.0033300000000000005,
+      "attack_percentage": 99.99667,
+      "imbalance_ratio": 30029.03003003003,
+      "missing_values": {
+        "total": 60000494,
+        "percentage": 17.142998285714288
+      },
+      "time_range": {
+        "stime_min": 1528099706.618065,
+        "stime_max": 1528101303.748516,
+        "ltime_min": 1528099713.12222,
+        "ltime_max": 1528101340.168923,
+        "duration_seconds": 1597.130450963974
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "udp": 9999412,
+        "arp": 247,
+        "tcp": 185,
+        "icmp": 153,
+        "ipv6-icmp": 3
+      }
+    },
+    "batch_08": {
+      "file": "batch_08",
+      "num_records": 3370443,
+      "num_features": 35,
+      "file_size_mb": 648.6357154846191,
+      "category_distribution": {
+        "DDoS": 3370329,
+        "Normal": 114
+      },
+      "num_normal": 114,
+      "num_attacks": 3370329,
+      "normal_percentage": 0.0033823446947478415,
+      "attack_percentage": 99.99661765530526,
+      "imbalance_ratio": 29564.28947368421,
+      "missing_values": {
+        "total": 20222864,
+        "percentage": 17.143031770177224
+      },
+      "time_range": {
+        "stime_min": 1528101303.748517,
+        "stime_max": 1528102081.922655,
+        "ltime_min": 1528101310.125725,
+        "ltime_max": 1528102201.191126,
+        "duration_seconds": 778.1741380691528
+      },
+      "numeric_features": 26,
+      "categorical_features": 9,
+      "protocol_distribution": {
+        "udp": 3370224,
+        "arp": 103,
+        "tcp": 65,
+        "icmp": 51
+      }
+    }
+  },
+  "overall": {
+    "total_records": 73370443,
+    "total_normal": 9543,
+    "total_attacks": 73360900,
+    "normal_percentage": 0.013006599946520701,
+    "attack_percentage": 99.98699340005348,
+    "imbalance_ratio": 7687.40438017395,
+    "category_distribution": {
+      "DoS": 33005194,
+      "Reconnaissance": 1821639,
+      "Normal": 9543,
+      "Theft": 1587,
+      "DDoS": 38532480
+    }
+  },
+  "recommendations": [
+    {
+      "category": "Imbalance",
+      "severity": "HIGH",
+      "message": "Extreme imbalance (7687:1). Use SMOTE or class weights.",
+      "action": "Apply SMOTE with sampling_strategy=0.1 or use scale_pos_weight in XGBoost"
+    },
+    {
+      "category": "Dataset Size",
+      "severity": "MEDIUM",
+      "message": "Large dataset (73,370,443 records). May need sampling or incremental learning.",
+      "action": "Consider training on subset or use incremental learning with multiple epochs."
+    },
+    {
+      "category": "Batch Selection",
+      "severity": "INFO",
+      "message": "8 batches contain Normal samples.",
+      "action": "Priority batches: batch_01, batch_04, batch_03"
+    }
+  ]
+}

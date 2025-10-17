@@ -1,0 +1,138 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║         🚀 IOT BOTNET DETECTION - TWO-STAGE CLASSIFICATION 🚀               ║
+║                                                                              ║
+║                          Lambda Team - Oct 2025                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📌 BẠN CÓ 3 PHƯƠNG ÁN ĐỂ CHỌN:
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ⭐ PHƯƠNG ÁN 3: TWO-STAGE HIERARCHICAL (RECOMMENDED!)                        │
+│    File: 04_hierarchical_two_stage_classification.py                         │
+│                                                                              │
+│    Stage 1: Phát hiện có tấn công không? (Attack vs Normal)                 │
+│    Stage 2: Nếu tấn công → Loại nào? (DDoS, DoS, Reconnaissance)            │
+│                                                                              │
+│    ✅ Xử lý tốt EXTREME imbalance (3 Normal vs 29K Attack)                   │
+│    ✅ Accuracy cao cho cả detection và classification                        │
+│    ✅ Đúng với mọi đề bài                                                    │
+│    ✅ Production-ready                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PHƯƠNG ÁN 1: Binary Classification                                          │
+│    File: 02_binary_attack_vs_normal.py                                       │
+│    Target: Attack (1) vs Normal (0)                                          │
+│    Best for: Real-time detection, IoT devices                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PHƯƠNG ÁN 2: Multi-class Classification                                     │
+│    File: 03_multiclass_4classes.py                                           │
+│    Target: Normal, DDoS, DoS, Reconnaissance (4 classes)                     │
+│    Best for: Forensics, detailed analysis                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 QUICK START (3 BƯỚC):
+
+1️⃣  Install dependencies:
+    cd "/home/lamdx4/Projects/IOT prj"
+    pip install -r requirements.txt
+
+2️⃣  Chạy phương án 3 (RECOMMENDED):
+    python3 04_hierarchical_two_stage_classification.py
+    
+    Thời gian: ~5 phút
+    Output: 2 models + metrics + visualizations
+
+3️⃣  Xem kết quả:
+    models/
+    ├── xgboost_stage1_binary_*.pkl
+    ├── xgboost_stage2_multiclass_*.pkl
+    ├── hierarchical_confusion_matrix.png
+    ├── hierarchical_overview.png
+    └── metrics_hierarchical_*.pkl
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📚 TÀI LIỆU:
+
+📖 QUICK_START.md              → Hướng dẫn nhanh
+📖 SO_SANH_3_PHUONG_AN.md      → So sánh chi tiết 3 phương án
+📖 RUN_MODELS.md               → Troubleshooting
+📓 notebooks/01_eda_dataset_analysis.ipynb → EDA hoàn chỉnh
+
+═══════════════════════════════════════════════════════════════════════════════
+
+⚡ DATASET INFO:
+
+📊 UNSW Bot-IoT Dataset (5% sample)
+   Total: 36,685 samples
+   Training: 29,348 | Testing: 7,337
+
+⚠️  EXTREME IMBALANCE:
+   Normal:          3 samples (0.01%)    ← CỰC KỲ ÍT!
+   Attack:     29,345 samples (99.99%)
+   
+   Attack breakdown:
+   ├─ DDoS:           15,658 (53.34%)
+   ├─ DoS:            12,975 (44.20%)
+   └─ Reconnaissance:    712 (2.43%)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✨ WHY TWO-STAGE APPROACH?
+
+❌ Binary (PA1):   Attack vs Normal
+   Problem: Không biết loại tấn công
+
+❌ Multi-class (PA2): Normal + 3 attack types
+   Problem: Normal bị "lost" giữa 4 classes
+
+✅ Two-Stage (PA3): 
+   Stage 1: Phát hiện Attack vs Normal
+   Stage 2: Phân loại loại tấn công (chỉ attack samples)
+   
+   → Stage 2 KHÔNG bị ảnh hưởng bởi Normal!
+   → Balanced hơn (DDoS: 53%, DoS: 44%, Recon: 2.4%)
+   → Best accuracy cho cả 2 tasks!
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎓 CHO ĐỀ TÀI:
+
+Đề tài: "Phát hiện tấn công IoT bằng Machine Learning"
+
+✅ Implement cả 3 phương án
+✅ So sánh performance
+✅ Recommend PA3 (Two-Stage) vì:
+   • Vừa "phát hiện" vừa "phân loại"
+   • Xử lý tốt imbalance
+   • Production-ready
+   • Đúng với mọi requirement
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🚀 CHẠY NGAY (2 CÁCH):
+
+CÁCH 1: Jupyter Notebook (RECOMMENDED!) ⭐
+    ./RUN_JUPYTER.sh
+    hoặc:
+    jupyter notebook notebooks/
+    
+    → Chọn: 04_hierarchical_two_stage.ipynb
+    → Chạy từng cell bằng Shift+Enter
+
+CÁCH 2: Python Script
+    python3 04_hierarchical_two_stage_classification.py
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Need help? Check QUICK_START.md or SO_SANH_3_PHUONG_AN.md
+
+Good luck! 🍀
+

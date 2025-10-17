@@ -1,0 +1,80 @@
+================================================================================
+BATCH STATISTICS SUMMARY
+================================================================================
+
+Created: 2025-10-17 11:21:59
+Number of batches: 8
+
+OVERALL STATISTICS
+--------------------------------------------------------------------------------
+Total records: 73,370,443
+Normal: 9,543 (0.01%)
+Attack: 73,360,900 (99.99%)
+Imbalance Ratio: 7687.4:1
+
+CATEGORY DISTRIBUTION
+--------------------------------------------------------------------------------
+DoS            : 33,005,194 (44.98%)
+Reconnaissance : 1,821,639 (2.48%)
+Normal         : 9,543 (0.01%)
+Theft          : 1,587 (0.00%)
+DDoS           : 38,532,480 (52.52%)
+
+BATCH DETAILS
+--------------------------------------------------------------------------------
+
+batch_01:
+  Records: 10,000,000
+  Normal:  7,384 (0.07%)
+  Attack:  9,992,616 (99.93%)
+
+batch_02:
+  Records: 10,000,000
+  Normal:  338 (0.00%)
+  Attack:  9,999,662 (100.00%)
+
+batch_03:
+  Records: 10,000,000
+  Normal:  345 (0.00%)
+  Attack:  9,999,655 (100.00%)
+
+batch_04:
+  Records: 10,000,000
+  Normal:  385 (0.00%)
+  Attack:  9,999,615 (100.00%)
+
+batch_05:
+  Records: 10,000,000
+  Normal:  326 (0.00%)
+  Attack:  9,999,674 (100.00%)
+
+batch_06:
+  Records: 10,000,000
+  Normal:  318 (0.00%)
+  Attack:  9,999,682 (100.00%)
+
+batch_07:
+  Records: 10,000,000
+  Normal:  333 (0.00%)
+  Attack:  9,999,667 (100.00%)
+
+batch_08:
+  Records: 3,370,443
+  Normal:  114 (0.00%)
+  Attack:  3,370,329 (100.00%)
+
+================================================================================
+TRAINING RECOMMENDATIONS
+================================================================================
+
+[HIGH] Imbalance
+  Extreme imbalance (7687:1). Use SMOTE or class weights.
+  Action: Apply SMOTE with sampling_strategy=0.1 or use scale_pos_weight in XGBoost
+
+[MEDIUM] Dataset Size
+  Large dataset (73,370,443 records). May need sampling or incremental learning.
+  Action: Consider training on subset or use incremental learning with multiple epochs.
+
+[INFO] Batch Selection
+  8 batches contain Normal samples.
+  Action: Priority batches: batch_01, batch_04, batch_03
