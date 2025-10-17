@@ -360,19 +360,47 @@ X_train_s2, X_val_s2, y_train_s2, y_val_s2 = train_test_split(
     X_train_full_s2, y_train_full_s2, test_size=0.15, random_state=42, stratify=y_train_full_s2
 )
 
-# SMOTE
-print(f"\n🔧 Applying SMOTE...")
-k2 = min(y_train_s2.value_counts().min() - 1, 5)
-if k2 > 0:
-    smote_s2 = SMOTE(sampling_strategy='not majority', random_state=42, k_neighbors=k2)
+# SMOTE - Limited to avoid RAM issues
+print(f"\n🔧 Applying SMOTE (limited sampling)...")
+print(f"   Class distribution before SMOTE:")
+for cls, count in sorted(y_train_s2.value_counts().items()):
+    cls_name = [k for k, v in attack_mapping.items() if v == cls][0]
+    print(f"      {cls_name}: {count:,}")
+
+# Calculate safe sampling strategy (max 10% of majority class)
+class_counts = y_train_s2.value_counts()
+majority_count = class_counts.max()
+safe_target = int(majority_count * 0.1)  # 10% of majority
+
+# Only oversample if minority is VERY small
+minority_count = class_counts.min()
+if minority_count < safe_target and minority_count > 5:
+    # Custom sampling strategy: bring minority up to 10% of majority
+    sampling_dict = {}
+    for cls in class_counts.index:
+        if class_counts[cls] < safe_target:
+            sampling_dict[cls] = safe_target
+    
+    k2 = min(minority_count - 1, 5)
+    smote_s2 = SMOTE(sampling_strategy=sampling_dict, random_state=42, k_neighbors=k2)
     X_train_s2_res, y_train_s2_res = smote_s2.fit_resample(X_train_s2, y_train_s2)
-    print(f"   ✅ {len(y_train_s2):,} → {len(y_train_s2_res):,}")
+    print(f"   ✅ Total: {len(y_train_s2):,} → {len(y_train_s2_res):,}")
+    print(f"   New distribution:")
+    for cls, count in sorted(pd.Series(y_train_s2_res).value_counts().items()):
+        cls_name = [k for k, v in attack_mapping.items() if v == cls][0]
+        print(f"      {cls_name}: {count:,}")
 else:
+    print(f"   ⚠️  Skipping SMOTE (minority too small or safe), using class weights instead")
     X_train_s2_res, y_train_s2_res = X_train_s2, y_train_s2
 
-# Train
+# Train with class weights
 print(f"\n🚀 Training Stage 2...")
 print(f"   Using: {TREE_METHOD} {'(GPU)' if USE_GPU else '(CPU)'}")
+
+# Calculate class weights (inverse frequency)
+from sklearn.utils.class_weight import compute_sample_weight
+sample_weights = compute_sample_weight('balanced', y_train_s2_res)
+print(f"   Using balanced sample weights to handle class imbalance")
 
 model_s2 = XGBClassifier(
     objective='multi:softmax', num_class=len(attack_mapping),
@@ -386,6 +414,7 @@ model_s2 = XGBClassifier(
 )
 
 model_s2.fit(X_train_s2_res, y_train_s2_res,
+             sample_weight=sample_weights,
              eval_set=[(X_val_s2, y_val_s2)], verbose=False)
 
 print(f"   ✅ Best iteration: {model_s2.best_iteration}, Score: {model_s2.best_score:.4f}")
