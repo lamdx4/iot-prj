@@ -59,7 +59,7 @@ print("="*80)
 
 # Find latest model files
 import glob
-model_files = glob.glob(os.path.join(MODEL_DIR, "stage1_*.pkl"))
+model_files = glob.glob(os.path.join(MODEL_DIR, "stage1*.pkl"))
 if not model_files:
     print("❌ No models found! Please run training first.")
     print(f"   Expected directory: {MODEL_DIR}")
@@ -71,20 +71,79 @@ if not model_files:
         print(f"      Directory does not exist!")
     exit(1)
 
-# Get latest timestamp - FIXED!
+# Get latest stage1 file
 latest_stage1 = sorted(model_files)[-1]
-# Extract timestamp: stage1_20251017_123456.pkl -> 20251017_123456
-basename = os.path.basename(latest_stage1)  # stage1_20251017_123456.pkl
-timestamp = basename.replace('stage1_', '').replace('.pkl', '')  # 20251017_123456
+basename_s1 = os.path.basename(latest_stage1)
 
-print(f"\n📂 Loading models with timestamp: {timestamp}")
-print(f"   Latest model: {os.path.basename(latest_stage1)}")
+print(f"\n📂 Found latest stage1 model: {basename_s1}")
 
-model_s1 = joblib.load(os.path.join(MODEL_DIR, f"stage1_{timestamp}.pkl"))
-model_s2 = joblib.load(os.path.join(MODEL_DIR, f"stage2_{timestamp}.pkl"))
-label_encoders = joblib.load(os.path.join(MODEL_DIR, f"encoders_{timestamp}.pkl"))
-attack_mapping = joblib.load(os.path.join(MODEL_DIR, f"mapping_{timestamp}.pkl"))
-feature_cols = joblib.load(os.path.join(MODEL_DIR, f"features_{timestamp}.pkl"))
+# Extract timestamp - handle both formats:
+# Format 1: stage1_20251017_123456.pkl
+# Format 2: stage1_binary_20251017_123456.pkl
+if '_binary_' in basename_s1:
+    # Old format with suffix
+    timestamp = basename_s1.replace('stage1_binary_', '').replace('.pkl', '')
+    stage1_file = f"stage1_binary_{timestamp}.pkl"
+    stage2_file = f"stage2_multiclass_{timestamp}.pkl"
+    print(f"   Detected old format with suffix")
+else:
+    # New format without suffix
+    timestamp = basename_s1.replace('stage1_', '').replace('.pkl', '')
+    stage1_file = f"stage1_{timestamp}.pkl"
+    stage2_file = f"stage2_{timestamp}.pkl"
+    print(f"   Detected new format")
+
+print(f"   Timestamp: {timestamp}")
+
+# Load models
+print(f"\n📂 Loading model files...")
+model_s1 = joblib.load(os.path.join(MODEL_DIR, stage1_file))
+print(f"   ✅ Loaded: {stage1_file}")
+
+model_s2 = joblib.load(os.path.join(MODEL_DIR, stage2_file))
+print(f"   ✅ Loaded: {stage2_file}")
+
+# Try different encoder file names (compatibility)
+encoder_files = [
+    f"encoders_{timestamp}.pkl",
+    f"label_encoder_{timestamp}.pkl",
+]
+label_encoders = None
+for enc_file in encoder_files:
+    enc_path = os.path.join(MODEL_DIR, enc_file)
+    if os.path.exists(enc_path):
+        label_encoders = joblib.load(enc_path)
+        print(f"   ✅ Loaded: {enc_file}")
+        break
+
+if label_encoders is None:
+    print(f"   ⚠️  No encoder file found, will skip encoding")
+
+# Try different mapping file names
+mapping_files = [
+    f"mapping_{timestamp}.pkl",
+    f"attack_mapping_{timestamp}.pkl",
+]
+attack_mapping = None
+for map_file in mapping_files:
+    map_path = os.path.join(MODEL_DIR, map_file)
+    if os.path.exists(map_path):
+        attack_mapping = joblib.load(map_path)
+        print(f"   ✅ Loaded: {map_file}")
+        break
+
+# Try different feature file names
+feature_files = [
+    f"features_{timestamp}.pkl",
+    f"feature_columns_{timestamp}.pkl",
+]
+feature_cols = None
+for feat_file in feature_files:
+    feat_path = os.path.join(MODEL_DIR, feat_file)
+    if os.path.exists(feat_path):
+        feature_cols = joblib.load(feat_path)
+        print(f"   ✅ Loaded: {feat_file}")
+        break
 
 print(f"✅ Loaded all model artifacts")
 print(f"   Features: {len(feature_cols)}")
@@ -141,15 +200,42 @@ if missing > 0:
 cat_cols = df_test_features.select_dtypes(include=['object']).columns.tolist()
 cat_cols = [col for col in cat_cols if col != 'category']
 
-for col in cat_cols:
-    if col in label_encoders:
-        le = label_encoders[col]
-        # Handle unseen labels
-        df_test_features[col] = df_test_features[col].apply(
-            lambda x: le.transform([x])[0] if x in le.classes_ else -1
-        )
-
-print(f"✅ Encoded {len(cat_cols)} categorical features")
+if label_encoders is not None:
+    # Check if label_encoders is a dict or single encoder
+    if isinstance(label_encoders, dict):
+        # New format: dictionary of encoders
+        print(f"🔧 Encoding categorical features (dict format)...")
+        for col in cat_cols:
+            if col in label_encoders:
+                le = label_encoders[col]
+                # Handle unseen labels
+                df_test_features[col] = df_test_features[col].apply(
+                    lambda x: le.transform([x])[0] if x in le.classes_ else -1
+                )
+                print(f"   ✅ Encoded: {col}")
+    else:
+        # Old format: single encoder (assume it's for 'proto')
+        print(f"🔧 Encoding categorical features (single encoder for 'proto')...")
+        if 'proto' in cat_cols:
+            le = label_encoders
+            df_test_features['proto'] = df_test_features['proto'].apply(
+                lambda x: le.transform([x])[0] if x in le.classes_ else -1
+            )
+            print(f"   ✅ Encoded: proto")
+        # Remove 'proto' from cat_cols if exists
+        cat_cols = [col for col in cat_cols if col != 'proto']
+        
+        # For other categorical columns, use simple label encoding
+        from sklearn.preprocessing import LabelEncoder
+        for col in cat_cols:
+            le_temp = LabelEncoder()
+            df_test_features[col] = le_temp.fit_transform(df_test_features[col].astype(str))
+            print(f"   ✅ Encoded: {col} (fit on test)")
+    
+    print(f"✅ Encoded {len(cat_cols) + (1 if 'proto' in df_test_features.columns else 0)} categorical features")
+else:
+    # No encoders, skip encoding
+    print(f"⚠️  No encoders available, skipping categorical encoding")
 
 # Prepare X, y
 X_test = df_test_features[available_features]
@@ -289,29 +375,38 @@ print("\n" + "="*80)
 print("6. COMBINED PIPELINE EVALUATION")
 print("="*80)
 
-print(f"\n🚀 Running full pipeline...")
+print(f"\n🚀 Running full pipeline (vectorized)...")
 start_time = time.time()
 
-final_predictions = []
-final_true_labels = []
+# Vectorized approach - MUCH FASTER!
+final_predictions = np.where(y_pred_s1 == 0, 'Normal', None).astype(object)
 
-for i in range(len(X_test)):
-    true_cat = y_test_true.iloc[i]
-    is_attack = y_pred_s1[i]
+# Batch predict for all attacks
+attack_mask = (y_pred_s1 == 1)
+num_attacks = attack_mask.sum()
+
+if num_attacks > 0:
+    print(f"   Processing {num_attacks:,} detected attacks...")
     
-    if is_attack == 0:
-        prediction = 'Normal'
+    # Get attack samples
+    if isinstance(X_test, pd.DataFrame):
+        attack_samples = X_test[attack_mask]
     else:
-        # Only predict attack type if we have this sample
-        if true_cat in attack_mapping:
-            sample = X_test.iloc[i:i+1]
-            attack_type = model_s2.predict(sample)[0]
-            prediction = [k for k, v in attack_mapping.items() if v == attack_type][0]
-        else:
-            prediction = 'Attack'  # Generic
+        attack_samples = X_test[attack_mask]
     
-    final_predictions.append(prediction)
-    final_true_labels.append(true_cat)
+    # Batch prediction!
+    attack_types = model_s2.predict(attack_samples)
+    
+    # Map to names
+    reverse_mapping = {v: k for k, v in attack_mapping.items()}
+    attack_names = np.array([reverse_mapping[t] for t in attack_types])
+    final_predictions[attack_mask] = attack_names
+    
+    print(f"   ✅ Batch prediction completed")
+
+# Convert to list
+final_predictions = list(final_predictions)
+final_true_labels = y_test_true.tolist()
 
 inference_time_total = time.time() - start_time
 
