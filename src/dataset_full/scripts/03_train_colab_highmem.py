@@ -214,7 +214,8 @@ print("="*80)
 
 cols_to_drop = ['pkSeqID', 'saddr', 'sport', 'daddr', 'dport', 
                 'smac', 'dmac', 'soui', 'doui', 'sco', 'dco',
-                'attack', 'category', 'subcategory']
+                'attack', 'category', 'subcategory',
+                'stime', 'ltime']  # Drop timestamp features (keep 'dur')
 
 feature_cols = [col for col in df_train.columns if col not in cols_to_drop]
 print(f"\n✅ Features: {len(feature_cols)}")
@@ -227,9 +228,15 @@ print(f"\n🔧 Handling missing values...")
 missing = df_train.isnull().sum().sum() + df_test.isnull().sum().sum()
 if missing > 0:
     numeric_cols = df_train.select_dtypes(include=['number']).columns
-    df_train[numeric_cols] = df_train[numeric_cols].fillna(df_train[numeric_cols].median())
-    df_test[numeric_cols] = df_test[numeric_cols].fillna(df_test[numeric_cols].median())
-    print(f"   ✅ Filled {missing:,} NaN values")
+    
+    # FIX: Calculate median from TRAIN set only
+    train_medians = df_train[numeric_cols].median()
+    
+    # Use train medians for BOTH train and test
+    df_train[numeric_cols] = df_train[numeric_cols].fillna(train_medians)
+    df_test[numeric_cols] = df_test[numeric_cols].fillna(train_medians)
+    
+    print(f"   ✅ Filled {missing:,} NaN values (using train medians)")
 
 # Encode categorical
 print(f"\n🔧 Encoding categorical features...")
@@ -239,12 +246,34 @@ cat_cols = [col for col in cat_cols if col != 'category']
 label_encoders = {}
 for col in cat_cols:
     le = LabelEncoder()
-    combined = pd.concat([df_train[col], df_test[col]]).unique()
-    le.fit(combined)
+    
+    # FIX: Fit encoder ONLY on train data
+    le.fit(df_train[col])
+    
+    # Transform train
     df_train[col] = le.transform(df_train[col])
-    df_test[col] = le.transform(df_test[col])
+    
+    # Transform test with unknown handling
+    def safe_transform(value):
+        """Transform value, return -1 for unknown categories"""
+        try:
+            return le.transform([value])[0]
+        except ValueError:
+            # Unknown category not in training set
+            return -1
+    
+    df_test[col] = df_test[col].apply(safe_transform)
+    
     label_encoders[col] = le
-    print(f"   ✅ {col}: {len(le.classes_)} classes")
+    
+    # Report encoding stats
+    n_train_classes = len(le.classes_)
+    n_unknown_test = (df_test[col] == -1).sum()
+    
+    if n_unknown_test > 0:
+        print(f"   ⚠️  {col}: {n_train_classes} classes, {n_unknown_test:,} unknown in test")
+    else:
+        print(f"   ✅ {col}: {n_train_classes} classes")
 
 feature_cols = [col for col in df_train.columns if col != 'category']
 print(f"\n✅ Final features: {len(feature_cols)}")
