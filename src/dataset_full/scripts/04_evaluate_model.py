@@ -37,17 +37,29 @@ print("="*80)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
 
-# Paths
-MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
-EVAL_DIR = os.getenv('EVAL_DIR', os.path.join(PROJECT_ROOT, "results/evaluation"))
-BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
+# Find latest run directory OR use specified run
+RUN_NAME = os.getenv('RUN_NAME', None)  # Can specify specific run
 
-os.makedirs(EVAL_DIR, exist_ok=True)
+if RUN_NAME:
+    RUN_DIR = os.path.join(PROJECT_ROOT, f"results/{RUN_NAME}")
+else:
+    # Find latest run
+    import glob
+    runs = glob.glob(os.path.join(PROJECT_ROOT, "results/run_*"))
+    if not runs:
+        print("❌ No training runs found!")
+        print(f"   Expected directory: {PROJECT_ROOT}/results/run_*")
+        exit(1)
+    RUN_DIR = sorted(runs)[-1]
+
+MODEL_DIR = os.path.join(RUN_DIR, "models")
+METRICS_DIR = os.path.join(RUN_DIR, "metrics")
+BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset"))
 
 print(f"\n📂 Paths:")
-print(f"   Model dir: {MODEL_DIR}")
-print(f"   Eval dir:  {EVAL_DIR}")
-print(f"   Batch dir: {BATCH_DIR}")
+print(f"   Run: {os.path.basename(RUN_DIR)}")
+print(f"   Models: {MODEL_DIR}")
+print(f"   Metrics: {METRICS_DIR}")
 
 # ============================================================================
 # 1. LOAD LATEST MODELS
@@ -95,13 +107,21 @@ else:
 
 print(f"   Timestamp: {timestamp}")
 
-# Load models
-print(f"\n📂 Loading model files...")
-model_s1 = joblib.load(os.path.join(MODEL_DIR, stage1_file))
-print(f"   ✅ Loaded: {stage1_file}")
+# Load models (no timestamp suffix)
+model_s1 = joblib.load(os.path.join(MODEL_DIR, "stage1.pkl"))
+print(f"   ✅ Loaded: stage1.pkl")
 
-model_s2 = joblib.load(os.path.join(MODEL_DIR, stage2_file))
-print(f"   ✅ Loaded: {stage2_file}")
+model_s2 = joblib.load(os.path.join(MODEL_DIR, "stage2.pkl"))
+print(f"   ✅ Loaded: stage2.pkl")
+
+label_encoders = joblib.load(os.path.join(MODEL_DIR, "encoders.pkl"))
+print(f"   ✅ Loaded: encoders.pkl")
+
+attack_mapping = joblib.load(os.path.join(MODEL_DIR, "mapping.pkl"))
+print(f"   ✅ Loaded: mapping.pkl")
+
+feature_cols = joblib.load(os.path.join(MODEL_DIR, "features.pkl"))
+print(f"   ✅ Loaded: features.pkl")
 
 # Try different encoder file names (compatibility)
 encoder_files = [
@@ -599,8 +619,8 @@ for i, cat in enumerate(all_categories):
         'total': total
     }
 
-# Save JSON
-eval_json_file = os.path.join(EVAL_DIR, f"evaluation_{eval_timestamp}.json")
+# Save evaluation results (no timestamp in filename)
+eval_json_file = os.path.join(METRICS_DIR, "evaluation.json")
 with open(eval_json_file, 'w') as f:
     json.dump(results, f, indent=2)
 
@@ -608,7 +628,7 @@ print(f"\n✅ Saved evaluation results:")
 print(f"   {eval_json_file}")
 
 # Save summary text
-summary_file = os.path.join(EVAL_DIR, f"evaluation_summary_{eval_timestamp}.txt")
+summary_file = os.path.join(METRICS_DIR, "evaluation_summary.txt")
 with open(summary_file, 'w') as f:
     f.write("="*80 + "\n")
     f.write("MODEL EVALUATION SUMMARY\n")

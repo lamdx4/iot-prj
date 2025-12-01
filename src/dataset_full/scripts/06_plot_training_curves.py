@@ -27,14 +27,29 @@ print("="*80)
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
-MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
-PLOT_DIR = os.getenv('PLOT_DIR', os.path.join(PROJECT_ROOT, "results/plots"))
+
+# Find latest run OR use specified run
+RUN_NAME = os.getenv('RUN_NAME', None)
+
+if RUN_NAME:
+    RUN_DIR = os.path.join(PROJECT_ROOT, f"results/{RUN_NAME}")
+else:
+    runs = glob.glob(os.path.join(PROJECT_ROOT, "results/run_*"))
+    if not runs:
+        print("❌ No training runs found!")
+        print(f"   Expected directory: {PROJECT_ROOT}/results/run_*")
+        exit(1)
+    RUN_DIR = sorted(runs)[-1]
+
+METRICS_DIR = os.path.join(RUN_DIR, "metrics")
+PLOT_DIR = os.path.join(RUN_DIR, "plots")
 
 os.makedirs(PLOT_DIR, exist_ok=True)
 
 print(f"\n📂 Paths:")
-print(f"   Model dir: {MODEL_DIR}")
-print(f"   Plot dir:  {PLOT_DIR}")
+print(f"   Run: {os.path.basename(RUN_DIR)}")
+print(f"   Metrics: {METRICS_DIR}")
+print(f"   Plot dir: {PLOT_DIR}")
 
 # ============================================================================
 # 1. LOAD LATEST TRAINING METRICS
@@ -44,18 +59,16 @@ print("\n" + "="*80)
 print("1. LOADING TRAINING METRICS")
 print("="*80)
 
-import glob
-metrics_files = glob.glob(os.path.join(MODEL_DIR, "training_metrics_*.json"))
+# Load training metrics (no timestamp in filename)
+metrics_file = os.path.join(METRICS_DIR, "training_metrics.json")
 
-if not metrics_files:
-    print("❌ No training metrics found!")
-    print(f"   Expected directory: {MODEL_DIR}")
+if not os.path.exists(metrics_file):
+    print(f"❌ Metrics file not found: {metrics_file}")
     exit(1)
 
-latest_metrics = sorted(metrics_files)[-1]
-print(f"\n📂 Latest metrics: {os.path.basename(latest_metrics)}")
+print(f"\n📂 Latest metrics: training_metrics.json")
 
-with open(latest_metrics, 'r') as f:
+with open(metrics_file, 'r') as f:
     metrics = json.load(f)
 
 timestamp = metrics['metadata']['timestamp']
@@ -93,7 +106,7 @@ plt.legend(fontsize=11, loc='upper right')
 plt.grid(True, alpha=0.3, linestyle='--')
 plt.tight_layout()
 
-plot_file_s1 = os.path.join(PLOT_DIR, f"stage1_loss_curve_{timestamp}.png")
+plot_file_s1 = os.path.join(PLOT_DIR, "stage1_loss_curve.png")
 plt.savefig(plot_file_s1, dpi=300, bbox_inches='tight')
 print(f"✅ Saved: {os.path.basename(plot_file_s1)}")
 plt.close()
@@ -123,7 +136,7 @@ plt.legend(fontsize=11, loc='upper right')
 plt.grid(True, alpha=0.3, linestyle='--')
 plt.tight_layout()
 
-plot_file_s2 = os.path.join(PLOT_DIR, f"stage2_loss_curve_{timestamp}.png")
+plot_file_s2 = os.path.join(PLOT_DIR, "stage2_loss_curve.png")
 plt.savefig(plot_file_s2, dpi=300, bbox_inches='tight')
 print(f"✅ Saved: {os.path.basename(plot_file_s2)}")
 plt.close()
@@ -159,7 +172,7 @@ ax2.legend(fontsize=10, loc='upper right')
 ax2.grid(True, alpha=0.3, linestyle='--')
 
 plt.tight_layout()
-plot_file_combined = os.path.join(PLOT_DIR, f"combined_loss_curves_{timestamp}.png")
+plot_file_combined = os.path.join(PLOT_DIR, "combined_loss_curves.png")
 plt.savefig(plot_file_combined, dpi=300, bbox_inches='tight')
 print(f"✅ Saved: {os.path.basename(plot_file_combined)}")
 plt.close()

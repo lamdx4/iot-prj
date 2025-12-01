@@ -97,10 +97,17 @@ except:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
 PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
 
-# Paths relative to project root (can be overridden via environment variables)
+# Create run-specific directory with timestamp
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+RUN_DIR = os.path.join(PROJECT_ROOT, f"results/run_{timestamp}")
+MODEL_DIR = os.path.join(RUN_DIR, "models")
+METRICS_DIR = os.path.join(RUN_DIR, "metrics")
 BATCH_DIR = os.getenv('BATCH_DIR', os.path.join(PROJECT_ROOT, "Data/Dataset/merged_batches"))
-MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
 STATS_FILE = os.getenv('STATS_FILE', os.path.join(PROJECT_ROOT, "src/dataset_full/stats/batch_statistics.json"))
+
+# Create directories
+os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(METRICS_DIR, exist_ok=True)
 
 # For Colab: override with simple paths if not in project structure
 if not os.path.exists(BATCH_DIR):
@@ -110,12 +117,13 @@ if not os.path.exists(BATCH_DIR):
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 print("\n" + "="*80)
-print("1. CONFIGURATION")
+print("STEP 3: TWO-STAGE TRAINING (XGBoost - GPU Optimized)")
 print("="*80)
 
-print(f"\n📂 Detected Paths:")
-print(f"   Project root: {PROJECT_ROOT}")
-print(f"   Batch dir:    {BATCH_DIR}")
+print(f"\n📂 Run Directory: results/run_{timestamp}")
+print(f"   Models:  {MODEL_DIR}")
+print(f"   Metrics: {METRICS_DIR}")
+print(f"   Batches: {BATCH_DIR}")
 print(f"   Model dir:    {MODEL_DIR}")
 print(f"   Stats file:   {STATS_FILE}")
 
@@ -755,15 +763,17 @@ print("="*80)
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-joblib.dump(model_s1, os.path.join(MODEL_DIR, f"stage1_{timestamp}.pkl"))
-joblib.dump(model_s2, os.path.join(MODEL_DIR, f"stage2_{timestamp}.pkl"))
-joblib.dump(label_encoders, os.path.join(MODEL_DIR, f"encoders_{timestamp}.pkl"))
-joblib.dump(attack_mapping, os.path.join(MODEL_DIR, f"mapping_{timestamp}.pkl"))
-joblib.dump(feature_cols, os.path.join(MODEL_DIR, f"features_{timestamp}.pkl"))
+# Save models (no timestamp suffix - folder already has timestamp)
+joblib.dump(model_s1, os.path.join(MODEL_DIR, "stage1.pkl"))
+joblib.dump(model_s2, os.path.join(MODEL_DIR, "stage2.pkl"))
+joblib.dump(label_encoders, os.path.join(MODEL_DIR, "encoders.pkl"))
+joblib.dump(attack_mapping, os.path.join(MODEL_DIR, "mapping.pkl"))
+joblib.dump(feature_cols, os.path.join(MODEL_DIR, "features.pkl"))
 
 print(f"\n✅ Models saved to: {MODEL_DIR}/")
-print(f"   • stage1_{timestamp}.pkl")
-print(f"   • stage2_{timestamp}.pkl")
+print(f"   • stage1.pkl")
+print(f"   • stage2.pkl")
+print(f"   + 3 more files (encoders, mapping, features)")
 
 # Save comprehensive training metrics
 training_metrics = {
@@ -842,12 +852,49 @@ for i, cat in enumerate(all_categories):
         'correct': int(correct)
     }
 
-# Save metrics
-metrics_file = os.path.join(MODEL_DIR, f"training_metrics_{timestamp}.json")
+# Save metrics to METRICS_DIR
+metrics_file = os.path.join(METRICS_DIR, "training_metrics.json")
 with open(metrics_file, 'w') as f:
     json.dump(training_metrics, f, indent=2)
 
-print(f"   • training_metrics_{timestamp}.json")
+print(f"\n✅ Metrics saved to: {METRICS_DIR}/")
+print(f"   • training_metrics.json")
+
+# Create README for this run
+print(f"\n📝 Creating README...")
+readme_file = os.path.join(RUN_DIR, "README.md")
+with open(readme_file, 'w') as f:
+    f.write(f"# Training Run {timestamp}\n\n")
+    f.write(f"**Trained**: {training_metrics['metadata']['trained_at']}\n\n")
+    f.write(f"## Configuration\n\n")
+    f.write(f"- Train samples: {training_metrics['metadata']['train_samples']:,}\n")
+    f.write(f"- Test samples: {training_metrics['metadata']['test_samples']:,}\n")
+    f.write(f"- Features: {training_metrics['metadata']['num_features']}\n")
+    f.write(f"- Attack types: {', '.join(training_metrics['metadata']['attack_types'])}\n\n")
+    f.write(f"## Training Metrics\n\n")
+    f.write(f"### Stage 1 (Binary Classification)\n\n")
+    f.write(f"- Accuracy: {training_metrics['stage1']['accuracy']:.4f} ({training_metrics['stage1']['accuracy']*100:.2f}%)\n")
+    f.write(f"- Precision: {training_metrics['stage1']['precision']:.4f}\n")
+    f.write(f"- Recall: {training_metrics['stage1']['recall']:.4f}\n")
+    f.write(f"- F1-Score: {training_metrics['stage1']['f1_score']:.4f}\n")
+    f.write(f"- Training time: {training_metrics['stage1']['training_time_sec']:.1f}s\n\n")
+    f.write(f"### Stage 2 (Multi-class Classification)\n\n")
+    f.write(f"- Accuracy: {training_metrics['stage2']['accuracy']:.4f} ({training_metrics['stage2']['accuracy']*100:.2f}%)\n")
+    f.write(f"- Precision (weighted): {training_metrics['stage2']['precision_weighted']:.4f}\n")
+    f.write(f"- Recall (weighted): {training_metrics['stage2']['recall_weighted']:.4f}\n")
+    f.write(f"- F1-Score (weighted): {training_metrics['stage2']['f1_weighted']:.4f}\n")
+    f.write(f"- Training time: {training_metrics['stage2']['training_time_sec']:.1f}s\n\n")
+    f.write(f"### Overall Pipeline\n\n")
+    f.write(f"- **Overall Accuracy: {training_metrics['overall']['accuracy']:.4f} ({training_metrics['overall']['accuracy']*100:.2f}%)**\n\n")
+    f.write(f"## Files\n\n")
+    f.write(f"- `models/` - Trained models and artifacts\n")
+    f.write(f"- `metrics/` - Training metrics (JSON)\n")
+    f.write(f"- `plots/` - Loss curves (run visualization script)\n\n")
+    f.write(f"## Next Steps\n\n")
+    f.write(f"1. Run evaluation: `python 04_evaluate_model.py`\n")
+    f.write(f"2. Generate plots: `python 06_plot_training_curves.py`\n")
+
+print(f"   • README.md")
 
 print("\n" + "="*80)
 print("✅ TRAINING COMPLETED!")
