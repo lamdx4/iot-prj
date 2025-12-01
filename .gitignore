@@ -73,7 +73,7 @@ logs/
 # Temporary files
 *.tmp
 *.bak
-*.md
+docs/
 
 Dataset/
 Ground Truth/
