@@ -166,31 +166,25 @@ print("\n" + "="*80)
 print("3. LOADING TEST DATA")
 print("="*80)
 
-test_batch_file = os.path.join(BATCH_DIR, "batch_02.csv")
-print(f"\n📂 Loading batch_02...", end=" ")
-df_batch02 = pd.read_csv(test_batch_file, low_memory=False)
-print(f"✅ {len(df_batch02):,} records")
+# Use balanced test set (created by 00_create_test_set.py)
+TEST_FILE = os.getenv('TEST_FILE', os.path.join(PROJECT_ROOT, "Data/Dataset/test_balanced_100k.csv"))
 
-# Sample 1M
-print(f"\n🔧 Sampling 300K from batch_02 (RAM optimized)...")
-if len(df_batch02) > 1000000:
-    df_test, _ = train_test_split(
-        df_batch02,
-        train_size=300000,
-        random_state=42,
-        stratify=df_batch02['category']
-    )
-else:
-    df_test = df_batch02
+print(f"\n📂 Loading balanced test set...")
+print(f"   File: {TEST_FILE}")
 
-del df_batch02
-gc.collect()
+df_test = pd.read_csv(TEST_FILE, low_memory=False)
 
-print(f"✅ Test data: {len(df_test):,} records")
+print(f"\n✅ Test data: {len(df_test):,} records")
+print(f"\n� Test set distribution:")
+for cat, count in df_test['category'].value_counts().items():
+    pct = count / len(df_test) * 100
+    print(f"   {cat:15s}: {count:6,} ({pct:5.2f}%)")
+
 try:
     print_memory_usage()
 except:
     pass
+
 
 # ============================================================================
 # 4. DATA EXPLORATION

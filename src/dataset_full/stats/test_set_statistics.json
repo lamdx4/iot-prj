@@ -1,0 +1,164 @@
+{
+  "metadata": {
+    "created_at": "2025-12-01 12:13:28",
+    "total_records": 100000,
+    "file_path": "/home/lamdx4/Projects/IOT prj/Data/Dataset/test_balanced_100k.csv",
+    "file_size_mb": 19.68
+  },
+  "category_distribution": {
+    "DoS": {
+      "count": 50000,
+      "percentage": 50.0
+    },
+    "DDoS": {
+      "count": 35000,
+      "percentage": 35.0
+    },
+    "Reconnaissance": {
+      "count": 13000,
+      "percentage": 13.0
+    },
+    "Normal": {
+      "count": 2000,
+      "percentage": 2.0
+    }
+  },
+  "sampling_plan": {
+    "batch_01": {
+      "Reconnaissance": 13000,
+      "DoS": 15000,
+      "Normal": 1500
+    },
+    "batch_02": {
+      "DoS": 15000,
+      "Normal": 100
+    },
+    "batch_03": {
+      "DoS": 10000,
+      "Normal": 100
+    },
+    "batch_04": {
+      "DDoS": 20000,
+      "DoS": 10000,
+      "Normal": 100
+    },
+    "batch_05": {
+      "DDoS": 8000,
+      "Normal": 50
+    },
+    "batch_06": {
+      "DDoS": 7000,
+      "Normal": 50
+    },
+    "batch_07": {
+      "Normal": 50
+    },
+    "batch_08": {
+      "Normal": 50
+    }
+  },
+  "batch_contributions": {
+    "batch_01": {
+      "total_sampled": 29500,
+      "category_distribution": {
+        "DoS": 15000,
+        "Reconnaissance": 13000,
+        "Normal": 1500
+      }
+    },
+    "batch_02": {
+      "total_sampled": 15100,
+      "category_distribution": {
+        "DoS": 15000,
+        "Normal": 100
+      }
+    },
+    "batch_03": {
+      "total_sampled": 10100,
+      "category_distribution": {
+        "DoS": 10000,
+        "Normal": 100
+      }
+    },
+    "batch_04": {
+      "total_sampled": 30100,
+      "category_distribution": {
+        "DDoS": 20000,
+        "DoS": 10000,
+        "Normal": 100
+      }
+    },
+    "batch_05": {
+      "total_sampled": 8050,
+      "category_distribution": {
+        "DDoS": 8000,
+        "Normal": 50
+      }
+    },
+    "batch_06": {
+      "total_sampled": 7050,
+      "category_distribution": {
+        "DDoS": 7000,
+        "Normal": 50
+      }
+    },
+    "batch_07": {
+      "total_sampled": 50,
+      "category_distribution": {
+        "Normal": 50
+      }
+    },
+    "batch_08": {
+      "total_sampled": 50,
+      "category_distribution": {
+        "Normal": 50
+      }
+    }
+  },
+  "feature_info": {
+    "num_features": 35,
+    "feature_names": [
+      "pkSeqID",
+      "stime",
+      "flgs",
+      "proto",
+      "saddr",
+      "sport",
+      "daddr",
+      "dport",
+      "pkts",
+      "bytes",
+      "state",
+      "ltime",
+      "seq",
+      "dur",
+      "mean",
+      "stddev",
+      "smac",
+      "dmac",
+      "sum",
+      "min",
+      "max",
+      "soui",
+      "doui",
+      "sco",
+      "dco",
+      "spkts",
+      "dpkts",
+      "sbytes",
+      "dbytes",
+      "rate",
+      "srate",
+      "drate",
+      "attack",
+      "category",
+      "subcategory"
+    ],
+    "numeric_features": 26,
+    "categorical_features": 9
+  },
+  "missing_values": {
+    "total": 600218,
+    "percentage": 17.1491
+  }
+}
