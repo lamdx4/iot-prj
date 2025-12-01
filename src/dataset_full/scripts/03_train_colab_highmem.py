@@ -212,6 +212,131 @@ print("\n" + "="*80)
 print("5. FEATURE ENGINEERING")
 print("="*80)
 
+# ============================================================================
+# 5.1 SOURCE DIVERSITY FEATURES (before dropping saddr)
+# ============================================================================
+
+print("\n🔧 Creating source diversity features...")
+print("   Using saddr aggregation to distinguish DDoS vs DoS")
+
+from scipy.stats import entropy as scipy_entropy
+import numpy as np
+
+# Define time window size (30 seconds recommended)
+WINDOW_SIZE = 30  # seconds
+
+def calculate_source_diversity(group):
+    """
+    Calculate source diversity metrics for a group of flows
+    DDoS: Many unique sources, high entropy, low top_src_ratio
+    DoS: Few unique sources, low entropy, high top_src_ratio
+    """
+    if len(group) == 0:
+        return pd.Series({
+            'unique_src_count': 1,
+            'src_entropy': 0.0,
+            'top_src_ratio': 1.0
+        })
+    
+    # 1. Unique source count (KEY metric!)
+    unique_count = group['saddr'].nunique()
+    
+    # 2. Source entropy (diversity measure)
+    src_counts = group['saddr'].value_counts()
+    if len(src_counts) > 1:
+        src_probs = src_counts / src_counts.sum()
+        src_entropy_val = scipy_entropy(src_probs, base=2)
+    else:
+        src_entropy_val = 0.0
+    
+    # 3. Top source ratio (concentration measure)
+    # High ratio = traffic dominated by single source (DoS)
+    # Low ratio = traffic distributed (DDoS)
+    top_src_ratio = src_counts.iloc[0] / len(group) if len(src_counts) > 0 else 1.0
+    
+    return pd.Series({
+        'unique_src_count': unique_count,
+        'src_entropy': src_entropy_val,
+        'top_src_ratio': top_src_ratio
+    })
+
+# Process TRAIN set
+print(f"   Processing training data...")
+df_train['time_window'] = (df_train['stime'] // WINDOW_SIZE).astype(int)
+
+try:
+    # Group by time window + target (daddr)
+    train_diversity = df_train.groupby(['time_window', 'daddr']).apply(
+        calculate_source_diversity
+    ).reset_index()
+    
+    # Merge back to original data
+    df_train = df_train.merge(
+        train_diversity, 
+        on=['time_window', 'daddr'], 
+        how='left'
+    )
+    
+    # Fill NaN for flows without aggregation
+    df_train['unique_src_count'].fillna(1, inplace=True)
+    df_train['src_entropy'].fillna(0.0, inplace=True)
+    df_train['top_src_ratio'].fillna(1.0, inplace=True)
+    
+    print(f"      ✅ Train: {len(df_train):,} records")
+    print(f"      unique_src_count range: {df_train['unique_src_count'].min():.0f} - {df_train['unique_src_count'].max():.0f}")
+    
+except Exception as e:
+    print(f"      ⚠️  Error in train aggregation: {e}")
+    print(f"      Using default values")
+    df_train['unique_src_count'] = 1
+    df_train['src_entropy'] = 0.0
+    df_train['top_src_ratio'] = 1.0
+
+# Process TEST set (SEPARATE to avoid leakage)
+print(f"   Processing test data...")
+df_test['time_window'] = (df_test['stime'] // WINDOW_SIZE).astype(int)
+
+try:
+    test_diversity = df_test.groupby(['time_window', 'daddr']).apply(
+        calculate_source_diversity
+    ).reset_index()
+    
+    df_test = df_test.merge(
+        test_diversity,
+        on=['time_window', 'daddr'],
+        how='left'
+    )
+    
+    df_test['unique_src_count'].fillna(1, inplace=True)
+    df_test['src_entropy'].fillna(0.0, inplace=True)
+    df_test['top_src_ratio'].fillna(1.0, inplace=True)
+    
+    print(f"      ✅ Test: {len(df_test):,} records")
+    print(f"      unique_src_count range: {df_test['unique_src_count'].min():.0f} - {df_test['unique_src_count'].max():.0f}")
+    
+except Exception as e:
+    print(f"      ⚠️  Error in test aggregation: {e}")
+    print(f"      Using default values")
+    df_test['unique_src_count'] = 1
+    df_test['src_entropy'] = 0.0
+    df_test['top_src_ratio'] = 1.0
+
+# Drop temporary column
+df_train.drop('time_window', axis=1, inplace=True, errors='ignore')
+df_test.drop('time_window', axis=1, inplace=True, errors='ignore')
+
+print(f"\n   ✅ Added 3 source diversity features:")
+print(f"      - unique_src_count (DDoS: high, DoS: low)")
+print(f"      - src_entropy (DDoS: high, DoS: low)")
+print(f"      - top_src_ratio (DDoS: low, DoS: high)")
+
+gc.collect()
+
+# ============================================================================
+# 5.2 FEATURE SELECTION (now drop saddr, daddr safely)
+# ============================================================================
+
+
 cols_to_drop = ['pkSeqID', 'saddr', 'sport', 'daddr', 'dport', 
                 'smac', 'dmac', 'soui', 'doui', 'sco', 'dco',
                 'attack', 'category', 'subcategory',
