@@ -157,26 +157,99 @@ print("\n" + "="*80)
 print("2. LOADING TEST DATA")
 print("="*80)
 
-# Use batch_02 for testing (same as training)
-test_file = os.path.join(BATCH_DIR, "batch_02.csv")
+# Use balanced test set (created by 00_create_test_set.py)
+TEST_FILE = os.getenv('TEST_FILE', os.path.join(PROJECT_ROOT, "Data/Dataset/test_balanced_100k.csv"))
 
-print(f"\n📂 Loading test data from batch_02...")
-df_test = pd.read_csv(test_file, low_memory=False)
+print(f"\n📂 Loading balanced test set...")
+print(f"   File: {TEST_FILE}")
+
+df_test = pd.read_csv(TEST_FILE, low_memory=False)
 print(f"✅ Loaded {len(df_test):,} records")
 
-# Sample if too large (for faster evaluation)
-if len(df_test) > 1000000:
-    print(f"\n🔧 Sampling 1M for evaluation...")
-    from sklearn.model_selection import train_test_split
-    df_test, _ = train_test_split(df_test, train_size=1000000, random_state=42, stratify=df_test['category'])
-    print(f"✅ Sampled to {len(df_test):,} records")
+# Show distribution
+print(f"\n📊 Test set distribution:")
+for cat, count in df_test['category'].value_counts().items():
+    pct = count / len(df_test) * 100
+    print(f"   {cat:15s}: {count:6,} ({pct:5.2f}%)")
+
 
 # ============================================================================
-# 3. PREPROCESS TEST DATA
+# 3. CREATE SOURCE DIVERSITY FEATURES (same as training)
 # ============================================================================
 
 print("\n" + "="*80)
-print("3. PREPROCESSING TEST DATA")
+print("3. CREATE SOURCE DIVERSITY FEATURES")
+print("="*80)
+
+print("\n🔧 Creating source diversity features...")
+print("   Using saddr aggregation (same as training)")
+
+from scipy.stats import entropy as scipy_entropy
+import numpy as np
+
+WINDOW_SIZE = 30  # seconds (same as training)
+
+def calculate_source_diversity(group):
+    """Calculate source diversity metrics - same as training"""
+    if len(group) == 0:
+        return pd.Series({
+            'unique_src_count': 1,
+            'src_entropy': 0.0,
+            'top_src_ratio': 1.0
+        })
+    
+    unique_count = group['saddr'].nunique()
+    
+    src_counts = group['saddr'].value_counts()
+    if len(src_counts) > 1:
+        src_probs = src_counts / src_counts.sum()
+        src_entropy_val = scipy_entropy(src_probs, base=2)
+    else:
+        src_entropy_val = 0.0
+    
+    top_src_ratio = src_counts.iloc[0] / len(group) if len(src_counts) > 0 else 1.0
+    
+    return pd.Series({
+        'unique_src_count': unique_count,
+        'src_entropy': src_entropy_val,
+        'top_src_ratio': top_src_ratio
+    })
+
+# Process test set
+print(f"   Processing test data...")
+df_test['time_window'] = (df_test['stime'] // WINDOW_SIZE).astype(int)
+
+try:
+    test_diversity = df_test.groupby(['time_window', 'daddr']).apply(
+        calculate_source_diversity
+    ).reset_index()
+    
+    df_test = df_test.merge(test_diversity, on=['time_window', 'daddr'], how='left')
+    df_test['unique_src_count'].fillna(1, inplace=True)
+    df_test['src_entropy'].fillna(0.0, inplace=True)
+    df_test['top_src_ratio'].fillna(1.0, inplace=True)
+    
+    print(f"      ✅ Test: {len(df_test):,} records")
+    print(f"      unique_src_count range: {df_test['unique_src_count'].min():.0f} - {df_test['unique_src_count'].max():.0f}")
+    
+except Exception as e:
+    print(f"      ⚠️  Error: {e}")
+    print(f"      Using default values")
+    df_test['unique_src_count'] = 1
+    df_test['src_entropy'] = 0.0
+    df_test['top_src_ratio'] = 1.0
+
+# Drop temporary column
+df_test.drop('time_window', axis=1, inplace=True, errors='ignore')
+
+print(f"\n   ✅ Added 3 source diversity features")
+
+# ============================================================================
+# 4. PREPROCESS TEST DATA
+# ============================================================================
+
+print("\n" + "="*80)
+print("4. PREPROCESSING TEST DATA")
 print("="*80)
 
 # Drop unwanted columns
@@ -242,11 +315,11 @@ X_test = df_test_features[available_features]
 y_test_true = df_test_features['category']
 
 # ============================================================================
-# 4. STAGE 1 EVALUATION - ATTACK vs NORMAL
+# 5. STAGE 1 EVALUATION - ATTACK vs NORMAL
 # ============================================================================
 
 print("\n" + "="*80)
-print("4. STAGE 1 EVALUATION - ATTACK vs NORMAL")
+print("5. STAGE 1 EVALUATION - ATTACK vs NORMAL")
 print("="*80)
 
 # Create binary labels
@@ -302,11 +375,11 @@ print(f"      Recall:    {tp/(tp+fn) if (tp+fn)>0 else 0:.6f}")
 print(f"      Support:   {fn+tp:,}")
 
 # ============================================================================
-# 5. STAGE 2 EVALUATION - ATTACK TYPE CLASSIFICATION
+# 6. STAGE 2 EVALUATION - ATTACK TYPE CLASSIFICATION
 # ============================================================================
 
 print("\n" + "="*80)
-print("5. STAGE 2 EVALUATION - ATTACK TYPE")
+print("6. STAGE 2 EVALUATION - ATTACK TYPE")
 print("="*80)
 
 # Filter attack samples
@@ -368,11 +441,11 @@ for i, cls in enumerate(attack_classes):
     print(f"      Support:   {true_count:,}")
 
 # ============================================================================
-# 6. COMBINED PIPELINE EVALUATION
+# 7. COMBINED PIPELINE EVALUATION
 # ============================================================================
 
 print("\n" + "="*80)
-print("6. COMBINED PIPELINE EVALUATION")
+print("7. COMBINED PIPELINE EVALUATION")
 print("="*80)
 
 print(f"\n🚀 Running full pipeline (vectorized)...")
@@ -445,11 +518,11 @@ print("\n", classification_report(final_true_labels, final_predictions,
                                   labels=all_categories, zero_division=0, digits=4))
 
 # ============================================================================
-# 7. SAVE EVALUATION RESULTS
+# 8. SAVE EVALUATION RESULTS
 # ============================================================================
 
 print("\n" + "="*80)
-print("7. SAVING EVALUATION RESULTS")
+print("8. SAVING EVALUATION RESULTS")
 print("="*80)
 
 eval_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
