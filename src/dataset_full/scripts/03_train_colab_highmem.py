@@ -448,10 +448,19 @@ if k > 0:
 else:
     X_train_s1_res, y_train_s1_res = X_train_s1, y_train_s1
 
-# Train
-print(f"\n🚀 Training Stage 1...")
+# Train Stage 1
+print(f"\n🚀 Training Stage 1 (Binary Classifier)...")
 print(f"   Using: {TREE_METHOD} {'(GPU)' if USE_GPU else '(CPU)'}")
+
+# Calculate scale_pos_weight
 scale_pos_weight = (y_train_s1_res==0).sum() / max((y_train_s1_res==1).sum(), 1)
+
+# Prepare eval_set for loss tracking
+print(f"   Setting up loss tracking...")
+eval_set_s1 = [
+    (X_train_s1, y_train_s1),       # Training set (original, not resampled)
+    (X_val_s1, y_val_s1)             # Validation set
+]
 
 model_s1 = XGBClassifier(
     n_estimators=200, max_depth=6, learning_rate=0.1,
@@ -467,10 +476,20 @@ model_s1 = XGBClassifier(
     grow_policy='depthwise' if USE_GPU else 'depthwise',  # Better for GPU
 )
 
-model_s1.fit(X_train_s1_res, y_train_s1_res, 
-             eval_set=[(X_val_s1, y_val_s1)], verbose=False)
+start_time = time.time()
+model_s1.fit(
+    X_train_s1_res, y_train_s1_res,
+    eval_set=eval_set_s1,
+    verbose=False
+)
+train_time_s1 = time.time() - start_time
 
-print(f"   ✅ Best iteration: {model_s1.best_iteration}, Score: {model_s1.best_score:.4f}")
+# Capture training history
+history_s1 = model_s1.evals_result()
+
+print(f"   ✅ Training completed: {train_time_s1:.1f}s")
+print(f"   ✅ Loss tracking: {len(history_s1['validation_0']['logloss'])} iterations logged")
+print(f"   Best iteration: {model_s1.best_iteration}, Score: {model_s1.best_score:.4f}")
 
 # Check GPU usage after training
 if USE_GPU:
@@ -573,8 +592,16 @@ print(f"   Using: {TREE_METHOD} {'(GPU)' if USE_GPU else '(CPU)'}")
 
 # Calculate class weights (inverse frequency)
 from sklearn.utils.class_weight import compute_sample_weight
+# Calculate sample weights
 sample_weights = compute_sample_weight('balanced', y_train_s2_res)
 print(f"   Using balanced sample weights to handle class imbalance")
+
+# Prepare eval_set for loss tracking
+print(f"   Setting up loss tracking...")
+eval_set_s2 = [
+    (X_train_s2, y_train_s2),       # Training set (original, not resampled)
+    (X_val_s2, y_val_s2)             # Validation set
+]
 
 model_s2 = XGBClassifier(
     objective='multi:softmax', num_class=len(attack_mapping),
@@ -590,11 +617,21 @@ model_s2 = XGBClassifier(
     grow_policy='depthwise' if USE_GPU else 'depthwise',  # Better for GPU
 )
 
-model_s2.fit(X_train_s2_res, y_train_s2_res,
-             sample_weight=sample_weights,
-             eval_set=[(X_val_s2, y_val_s2)], verbose=False)
+start_time = time.time()
+model_s2.fit(
+    X_train_s2_res, y_train_s2_res,
+    sample_weight=sample_weights,
+    eval_set=eval_set_s2,
+    verbose=False
+)
+train_time_s2 = time.time() - start_time
 
-print(f"   ✅ Best iteration: {model_s2.best_iteration}, Score: {model_s2.best_score:.4f}")
+# Capture training history
+history_s2 = model_s2.evals_result()
+
+print(f"   ✅ Training completed: {train_time_s2:.1f}s")
+print(f"   ✅ Loss tracking: {len(history_s2['validation_0']['mlogloss'])} iterations logged")
+print(f"   Best iteration: {model_s2.best_iteration}, Score: {model_s2.best_score:.4f}")
 
 # Check GPU usage after training
 if USE_GPU:
@@ -758,7 +795,13 @@ training_metrics = {
         'f1_score': float(f1_score(y_test_binary, y_pred_s1, zero_division=0)),
         'roc_auc': float(roc_auc_score(y_test_binary, y_pred_s1_proba)) if len(np.unique(y_test_binary)) > 1 else None,
         'best_iteration': int(model_s1.best_iteration),
-        'best_score': float(model_s1.best_score)
+        'best_score': float(model_s1.best_score),
+        'training_time_sec': float(train_time_s1),
+        'training_history': {
+            'train_loss': [float(x) for x in history_s1['validation_0']['logloss']],
+            'val_loss': [float(x) for x in history_s1['validation_1']['logloss']],
+            'num_iterations': len(history_s1['validation_0']['logloss'])
+        }
     },
     'stage2': {
         'accuracy': float(accuracy_score(y_test_s2, y_pred_s2)),
@@ -766,7 +809,13 @@ training_metrics = {
         'recall_weighted': float(recall_score(y_test_s2, y_pred_s2, average='weighted', zero_division=0)),
         'f1_weighted': float(f1_score(y_test_s2, y_pred_s2, average='weighted', zero_division=0)),
         'best_iteration': int(model_s2.best_iteration),
-        'best_score': float(model_s2.best_score)
+        'best_score': float(model_s2.best_score),
+        'training_time_sec': float(train_time_s2),
+        'training_history': {
+            'train_loss': [float(x) for x in history_s2['validation_0']['mlogloss']],
+            'val_loss': [float(x) for x in history_s2['validation_1']['mlogloss']],
+            'num_iterations': len(history_s2['validation_0']['mlogloss'])
+        }
     },
     'overall': {
         'accuracy': float(overall_acc),
