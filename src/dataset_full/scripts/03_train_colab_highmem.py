@@ -24,6 +24,7 @@ import pandas as pd
 import numpy as np
 import json
 import os
+import time
 from datetime import datetime
 import warnings
 import gc
@@ -57,32 +58,34 @@ print("TRAIN TWO-STAGE MODEL - COLAB PRO+ HIGH-RAM")
 print("="*80)
 print(f"XGBoost version: {xgb.__version__}")
 
-# Check GPU availability
+# GPU Detection and Configuration (XGBoost 3.x compatible)
 try:
     import subprocess
-    gpu_info = subprocess.check_output(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader']).decode()
-    print(f"🚀 GPU detected: {gpu_info.strip()}")
-    
-    # Get GPU memory
-    gpu_mem_gb = int(gpu_info.split(',')[1].strip().split()[0]) / 1024
-    print(f"   GPU Memory: {gpu_mem_gb:.1f} GB")
-    
-    USE_GPU = True
-    TREE_METHOD = "gpu_hist"
-    
-    # Optimize for GPU (especially A100)
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    
-    # Force XGBoost to use all GPU memory
-    if 'A100' in gpu_info or 'V100' in gpu_info:
-        print(f"   🚀 Detected high-end GPU! Optimizing for maximum throughput...")
-        # For large datasets, increase GPU cache
-        os.environ['XGBOOST_GPU_SINGLE_PRECISION_HISTOGRAM'] = '1'
-    
-except:
-    print("⚠️  No GPU detected, using CPU")
+    result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader'], 
+                          capture_output=True, text=True, timeout=5)
+    if result.returncode == 0:
+        gpu_info = result.stdout.strip().split(',')
+        gpu_name = gpu_info[0].strip()
+        gpu_mem = gpu_info[1].strip()
+        print(f"🚀 GPU detected: {gpu_name}, {gpu_mem}")
+        
+        # XGBoost 3.x uses device parameter instead of tree_method='gpu_hist'
+        USE_GPU = True
+        DEVICE = 'cuda'  # or 'cuda:0' for specific GPU
+        TREE_METHOD = 'hist'  # Use 'hist' with device='cuda' for GPU
+        
+        # Get GPU memory in GB
+        gpu_mem_gb = float(gpu_mem.split()[0]) / 1024
+        print(f"   GPU Memory: {gpu_mem_gb:.1f} GB")
+    else:
+        USE_GPU = False
+        DEVICE = 'cpu'
+        TREE_METHOD = 'hist'
+except Exception as e:
+    print(f"⚠️  No GPU detected, using CPU ({e})")
     USE_GPU = False
-    TREE_METHOD = "hist"
+    DEVICE = 'cpu'
+    TREE_METHOD = 'hist'
 
 try:
     print_memory_usage()
@@ -475,13 +478,9 @@ model_s1 = XGBClassifier(
     subsample=0.8, colsample_bytree=0.8,
     scale_pos_weight=scale_pos_weight,
     tree_method=TREE_METHOD,
-    predictor="gpu_predictor" if USE_GPU else "auto",
+    device=DEVICE,  # XGBoost 3.x: use device instead of predictor
     random_state=42, eval_metric='logloss',
-    early_stopping_rounds=20, 
-    n_jobs=1 if USE_GPU else -1,
-    # GPU optimization
-    max_bin=512 if USE_GPU else 256,  # More bins = more GPU usage
-    grow_policy='depthwise' if USE_GPU else 'depthwise',  # Better for GPU
+    early_stopping_rounds=20
 )
 
 start_time = time.time()
@@ -616,13 +615,9 @@ model_s2 = XGBClassifier(
     n_estimators=200, max_depth=6, learning_rate=0.1,
     subsample=0.8, colsample_bytree=0.8,
     tree_method=TREE_METHOD,
-    predictor="gpu_predictor" if USE_GPU else "auto",
+    device=DEVICE,  # XGBoost 3.x: use device instead of predictor
     random_state=42, eval_metric='mlogloss',
-    early_stopping_rounds=20, 
-    n_jobs=1 if USE_GPU else -1,
-    # GPU optimization
-    max_bin=512 if USE_GPU else 256,  # More bins = more GPU usage
-    grow_policy='depthwise' if USE_GPU else 'depthwise',  # Better for GPU
+    early_stopping_rounds=20
 )
 
 start_time = time.time()

@@ -69,45 +69,13 @@ print("\n" + "="*80)
 print("1. LOADING MODELS")
 print("="*80)
 
-# Find latest model files
-import glob
-model_files = glob.glob(os.path.join(MODEL_DIR, "stage1*.pkl"))
-if not model_files:
-    print("❌ No models found! Please run training first.")
-    print(f"   Expected directory: {MODEL_DIR}")
-    print(f"   Files in directory:")
-    try:
-        for f in os.listdir(MODEL_DIR):
-            print(f"      {f}")
-    except:
-        print(f"      Directory does not exist!")
-    exit(1)
+print(f"\n📂 Loading from: {os.path.basename(RUN_DIR)}")
 
-# Get latest stage1 file
-latest_stage1 = sorted(model_files)[-1]
-basename_s1 = os.path.basename(latest_stage1)
-
-print(f"\n📂 Found latest stage1 model: {basename_s1}")
-
-# Extract timestamp - handle both formats:
-# Format 1: stage1_20251017_123456.pkl
-# Format 2: stage1_binary_20251017_123456.pkl
-if '_binary_' in basename_s1:
-    # Old format with suffix
-    timestamp = basename_s1.replace('stage1_binary_', '').replace('.pkl', '')
-    stage1_file = f"stage1_binary_{timestamp}.pkl"
-    stage2_file = f"stage2_multiclass_{timestamp}.pkl"
-    print(f"   Detected old format with suffix")
-else:
-    # New format without suffix
-    timestamp = basename_s1.replace('stage1_', '').replace('.pkl', '')
-    stage1_file = f"stage1_{timestamp}.pkl"
-    stage2_file = f"stage2_{timestamp}.pkl"
-    print(f"   Detected new format")
-
-print(f"   Timestamp: {timestamp}")
+# Extract timestamp from run directory name (e.g., run_20251201_143848)
+timestamp = os.path.basename(RUN_DIR).replace('run_', '')
 
 # Load models (no timestamp suffix)
+print(f"\n📂 Loading model files...")
 model_s1 = joblib.load(os.path.join(MODEL_DIR, "stage1.pkl"))
 print(f"   ✅ Loaded: stage1.pkl")
 
@@ -123,49 +91,7 @@ print(f"   ✅ Loaded: mapping.pkl")
 feature_cols = joblib.load(os.path.join(MODEL_DIR, "features.pkl"))
 print(f"   ✅ Loaded: features.pkl")
 
-# Try different encoder file names (compatibility)
-encoder_files = [
-    f"encoders_{timestamp}.pkl",
-    f"label_encoder_{timestamp}.pkl",
-]
-label_encoders = None
-for enc_file in encoder_files:
-    enc_path = os.path.join(MODEL_DIR, enc_file)
-    if os.path.exists(enc_path):
-        label_encoders = joblib.load(enc_path)
-        print(f"   ✅ Loaded: {enc_file}")
-        break
-
-if label_encoders is None:
-    print(f"   ⚠️  No encoder file found, will skip encoding")
-
-# Try different mapping file names
-mapping_files = [
-    f"mapping_{timestamp}.pkl",
-    f"attack_mapping_{timestamp}.pkl",
-]
-attack_mapping = None
-for map_file in mapping_files:
-    map_path = os.path.join(MODEL_DIR, map_file)
-    if os.path.exists(map_path):
-        attack_mapping = joblib.load(map_path)
-        print(f"   ✅ Loaded: {map_file}")
-        break
-
-# Try different feature file names
-feature_files = [
-    f"features_{timestamp}.pkl",
-    f"feature_columns_{timestamp}.pkl",
-]
-feature_cols = None
-for feat_file in feature_files:
-    feat_path = os.path.join(MODEL_DIR, feat_file)
-    if os.path.exists(feat_path):
-        feature_cols = joblib.load(feat_path)
-        print(f"   ✅ Loaded: {feat_file}")
-        break
-
-print(f"✅ Loaded all model artifacts")
+print(f"\n✅ Loaded all model artifacts")
 print(f"   Features: {len(feature_cols)}")
 print(f"   Attack types: {len(attack_mapping)}")
 
@@ -689,9 +615,9 @@ print(f"   Avg Latency:       {inference_time_total / len(X_test) * 1000:.2f} ms
 print(f"   Throughput:        {len(X_test)/inference_time_total:.0f} samples/sec")
 
 print(f"\n📂 Results saved to:")
-print(f"   {EVAL_DIR}/")
-print(f"   • evaluation_{eval_timestamp}.json")
-print(f"   • evaluation_summary_{eval_timestamp}.txt")
+print(f"   {METRICS_DIR}/")
+print(f"   • evaluation.json")
+print(f"   • evaluation_summary.txt")
 
 print("\n" + "="*80)
 

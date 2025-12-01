@@ -32,42 +32,64 @@ print("="*80)
 print("GENERATE VISUALIZATIONS FROM TRAINING METRICS")
 print("="*80)
 
+# Auto-detect project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
+
+# Find latest run directory OR use specified run
+RUN_NAME = os.getenv('RUN_NAME', None)
+
+if RUN_NAME:
+    RUN_DIR = os.path.join(PROJECT_ROOT, f"results/{RUN_NAME}")
+else:
+    import glob
+    runs = glob.glob(os.path.join(PROJECT_ROOT, "results/run_*"))
+    if not runs:
+        print("❌ No training runs found!")
+        print(f"   Expected directory: {PROJECT_ROOT}/results/run_*")
+        exit(1)
+    RUN_DIR = sorted(runs)[-1]
+
+METRICS_DIR = os.path.join(RUN_DIR, "metrics")
+PLOT_DIR = os.path.join(RUN_DIR, "plots")
+
+os.makedirs(PLOT_DIR, exist_ok=True)
+
+print(f"\n📂 Using run: {os.path.basename(RUN_DIR)}")
+print(f"   Metrics: {METRICS_DIR}")
+print(f"   Plots: {PLOT_DIR}")
+
 # ============================================================================
-# 1. LOAD METRICS
+# 1. LOADING METRICS
 # ============================================================================
 
 print("\n" + "="*80)
 print("1. LOADING METRICS")
 print("="*80)
 
-# Auto-detect paths
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
-PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(SCRIPT_DIR, '../../..')))
-MODEL_DIR = os.getenv('MODEL_DIR', os.path.join(PROJECT_ROOT, "models/full_dataset"))
+# Load training metrics
+training_metrics_file = os.path.join(METRICS_DIR, "training_metrics.json")
+if not os.path.exists(training_metrics_file):
+    print(f"❌ Training metrics not found: {training_metrics_file}")
+    print(f"   Please train model first")
+    exit(1)
 
-# Find metrics file
-if len(sys.argv) > 1:
-    metrics_file = sys.argv[1]
+print(f"\n📂 Loading training metrics...")
+with open(training_metrics_file, 'r') as f:
+    training_metrics = json.load(f)
+
+print(f"   ✅ Loaded: training_metrics.json")
+
+# Load evaluation metrics (optional)
+eval_metrics_file = os.path.join(METRICS_DIR, "evaluation.json")
+eval_metrics = None
+if os.path.exists(eval_metrics_file):
+    with open(eval_metrics_file, 'r') as f:
+        eval_metrics = json.load(f)
+    print(f"   ✅ Loaded: evaluation.json")
 else:
-    # Find latest metrics file
-    import glob
-    metrics_files = sorted(glob.glob(os.path.join(MODEL_DIR, "training_metrics_*.json")))
-    if not metrics_files:
-        print("\n❌ No training metrics found!")
-        print(f"   Please train model first or specify metrics file path")
-        sys.exit(1)
-    metrics_file = metrics_files[-1]
-
-print(f"\n📂 Loading: {os.path.basename(metrics_file)}")
-
-with open(metrics_file, 'r') as f:
-    metrics = json.load(f)
-
-print(f"✅ Metrics loaded")
-print(f"   Timestamp: {metrics['metadata']['timestamp']}")
-print(f"   Train samples: {metrics['training_data']['total_records']:,}")
-print(f"   Test samples: {metrics['test_data']['total_records']:,}")
-print(f"   Overall accuracy: {metrics['overall']['accuracy']:.4f}")
+    print(f"   ⚠️  No evaluation results found (run 04_evaluate_model.py)")
+print(f"   Overall accuracy: {training_metrics['overall']['accuracy']:.4f}")
 
 # ============================================================================
 # 2. PREPARE DATA
@@ -78,22 +100,20 @@ print("2. PREPARING DATA")
 print("="*80)
 
 # Extract data
-cm_overall = np.array(metrics['overall']['confusion_matrix'])
-all_categories = list(metrics['overall']['per_category_metrics'].keys())
+cm_overall = np.array(training_metrics['overall']['confusion_matrix'])
+all_categories = list(training_metrics['overall']['per_category_metrics'].keys())
 
 categories = all_categories
-precisions = [metrics['overall']['per_category_metrics'][c]['precision'] for c in categories]
-recalls = [metrics['overall']['per_category_metrics'][c]['recall'] for c in categories]
-f1_scores = [metrics['overall']['per_category_metrics'][c]['f1_score'] for c in categories]
-supports = [metrics['overall']['per_category_metrics'][c]['support'] for c in categories]
+precisions = [training_metrics['overall']['per_category_metrics'][c]['precision'] for c in categories]
+recalls = [training_metrics['overall']['per_category_metrics'][c]['recall'] for c in categories]
+f1_scores = [training_metrics['overall']['per_category_metrics'][c]['f1_score'] for c in categories]
+supports = [training_metrics['overall']['per_category_metrics'][c]['support'] for c in categories]
 
 print(f"✅ Data prepared")
 print(f"   Categories: {', '.join(categories)}")
 
-# Create output directory
-timestamp = metrics['metadata']['timestamp']
-viz_dir = os.path.join(MODEL_DIR, f"visualizations_{timestamp}")
-os.makedirs(viz_dir, exist_ok=True)
+# Use PLOT_DIR directly (no subdirectory needed)
+viz_dir = PLOT_DIR
 
 print(f"   Output dir: {viz_dir}")
 
@@ -172,9 +192,9 @@ print("   ✅ Saved: 03_per_category_metrics.png")
 print("📊 4. Stage Comparison...")
 stages = ['Stage 1\n(Binary)', 'Stage 2\n(Multi-class)', 'Overall']
 accuracies = [
-    metrics['stage1']['accuracy'],
-    metrics['stage2']['accuracy'],
-    metrics['overall']['accuracy']
+    training_metrics['stage1']['accuracy'],
+    training_metrics['stage2']['accuracy'],
+    training_metrics['overall']['accuracy']
 ]
 
 colors = ['#3498db', '#e74c3c', '#2ecc71']
@@ -200,8 +220,8 @@ print("   ✅ Saved: 04_stage_comparison.png")
 
 # 5. Class Distribution (Train vs Test)
 print("📊 5. Class Distribution...")
-train_dist = metrics['training_data']['category_distribution']
-test_dist = metrics['test_data']['category_distribution']
+train_dist = training_metrics['training_data']['category_distribution']
+test_dist = training_metrics['test_data']['category_distribution']
 
 # Get all categories
 all_cats = sorted(set(list(train_dist.keys()) + list(test_dist.keys())))
@@ -318,23 +338,23 @@ metrics_text = f"""
 KEY METRICS
 
 Overall Accuracy:
-{metrics['overall']['accuracy']:.4f} ({metrics['overall']['accuracy']*100:.2f}%)
+{training_metrics['overall']['accuracy']:.4f} ({training_metrics['overall']['accuracy']*100:.2f}%)
 
 Stage 1 (Binary):
-• Accuracy: {metrics['stage1']['accuracy']:.4f}
-• ROC-AUC: {metrics['stage1'].get('roc_auc', 0):.4f}
+• Accuracy: {training_metrics['stage1']['accuracy']:.4f}
+• ROC-AUC: {training_metrics['stage1'].get('roc_auc', 0):.4f}
 
 Stage 2 (Multi-class):
-• Accuracy: {metrics['stage2']['accuracy']:.4f}
-• F1-Score: {metrics['stage2']['f1_weighted']:.4f}
+• Accuracy: {training_metrics['stage2']['accuracy']:.4f}
+• F1-Score: {training_metrics['stage2']['f1_weighted']:.4f}
 
 Dataset:
-• Train: {metrics['training_data']['total_records']:,} samples
-• Test: {metrics['test_data']['total_records']:,} samples
-• Features: {metrics['metadata']['num_features']}
+• Train: {training_metrics['training_data']['total_records']:,} samples
+• Test: {training_metrics['test_data']['total_records']:,} samples
+• Features: {training_metrics['metadata']['num_features']}
 
 Training Time:
-• Timestamp: {metrics['metadata']['trained_at']}
+• Timestamp: {training_metrics['metadata']['trained_at']}
 """
 ax_metrics.text(0.1, 0.95, metrics_text, transform=ax_metrics.transAxes,
                fontsize=10, verticalalignment='top', fontfamily='monospace',
