@@ -98,6 +98,10 @@ Hệ thống được huấn luyện và đánh giá trên nền tảng Google C
 
 **Lý do tạo balanced test set**: Tập test gốc có tỷ lệ mất cân bằng nghiêm trọng, khiến accuracy không phản ánh đúng khả năng phát hiện Normal. Tập test cân bằng cho phép đánh giá công bằng hiệu năng trên tất cả các lớp.
 
+![Phân phối lớp trong tập dữ liệu Bot-IoT (training vs test set)](figures/05_class_distribution.png)
+
+**Hình 3.1**: Phân phối lớp trong tập dữ liệu - So sánh giữa training set (imbalanced) và balanced test set. Training set có imbalance ratio 2000:1 trong khi test set được cân bằng để đánh giá công bằng.
+
 ### 3.1.4. Siêu tham số mô hình
 
 **Stage 1: Binary Classification (Attack vs Normal)**
@@ -166,6 +170,10 @@ Hệ thống được huấn luyện và đánh giá trên nền tảng Google C
 - Stage 2 đạt Accuracy 97.58%, tốt nhưng thấp hơn Stage 1, do bài toán multi-class phức tạp hơn
 - Overall Accuracy 97.19% là kết quả kết hợp của cả hai giai đoạn, thể hiện hiệu năng tổng thể của pipeline
 
+![Summary Dashboard](figures/00_summary_dashboard.png)
+
+**Hình 3.10**: Overall Performance Summary Dashboard - Tổng hợp tất cả metrics quan trọng: confusion matrices, per-category metrics, training curves, và stage comparison trong một dashboard duy nhất.
+
 ### 3.2.2. Confusion Matrix và phân tích chi tiết
 
 **Stage 1: Binary Classification**
@@ -217,6 +225,14 @@ Hệ thống được huấn luyện và đánh giá trên nền tảng Google C
 - 513 samples DDoS bị Stage 1 phân loại nhầm là Normal (do đặc điểm lưu lượng DDoS có thể giống Normal trong một số trường hợp)
 - 1,830 samples DDoS bị Stage 2 phân loại nhầm là Reconnaissance (do cả hai đều có đặc điểm "nhiều nguồn kết nối")
 
+![Confusion Matrix cho Overall Pipeline (4 categories)](figures/01_confusion_matrix.png)
+
+**Hình 3.2**: Overall Confusion Matrix (4x4) - Hiển thị số lượng samples thực tế được phân loại vào từng category. Diagonal chính thể hiện predictions đúng.
+
+![Normalized Confusion Matrix](figures/02_confusion_matrix_normalized.png)
+
+**Hình 3.3**: Normalized Confusion Matrix - Thể hiện tỷ lệ phần trăm cho mỗi actual class, giúp dễ dàng quan sát recall cho từng loại tấn công.
+
 ### 3.2.3. Training Curves
 
 **Training Loss Curves** (200 iterations):
@@ -242,7 +258,17 @@ Hệ thống được huấn luyện và đánh giá trên nền tảng Google C
 - Converge ổn định sau iteration 100, không có dấu hiệu overfitting (train loss và val loss gần nhau)
 - Early stopping không kích hoạt vì model vẫn cải thiện cho đến iteration cuối
 
-**Hình 3.1**: Training curves cho Stage 1 và Stage 2 (tham khảo file `combined_loss_curves.png` trong thư mục results)
+![Training Loss Curves cho Stage 1](figures/stage1_loss_curve.png)
+
+**Hình 3.4**: Training và Validation Loss cho Stage 1 (Binary Classification) - Loss giảm nhanh từ 0.6 → 0.0001 sau 200 iterations, không có dấu hiệu overfitting.
+
+![Training Loss Curves cho Stage 2](figures/stage2_loss_curve.png)
+
+**Hình 3.5**: Training và Validation Loss cho Stage 2 (Multi-class Classification) - Loss giảm từ 0.956 → 0.0004, converge ổn định sau 100 iterations.
+
+![Combined Training Curves](figures/combined_loss_curves.png)
+
+**Hình 3.6**: Combined Training Curves - So sánh loss evolution của cả hai stages, cho thấy cả hai đều học tốt và không bị overfitting.
 
 ## 3.3. Đánh giá hiệu năng
 
@@ -284,6 +310,10 @@ Hệ thống được huấn luyện và đánh giá trên nền tảng Google C
 - Precision thấp hơn: 1,830 DDoS bị nhầm là Reconnaissance
 - Nguyên nhân: Cả Recon và DDoS đều có "nhiều nguồn", khó phân biệt
 
+![Per-Category Metrics](figures/03_per_category_metrics.png)
+
+**Hình 3.7**: Precision, Recall và F1-Score cho từng category - DoS đạt hiệu năng tốt nhất (99.36% recall), trong khi DDoS có recall thấp nhất (93.22%).
+
 ### 3.3.2. Đánh giá hiệu năng tính toán
 
 **Bảng 3.13: Hiệu năng tính toán**
@@ -321,6 +351,10 @@ Diện tích dưới đường cong ROC gần như hoàn hảo (1.0), cho thấy
 - Khả năng ranking predictions chính xác gần như tuyệt đối
 
 **Ý nghĩa**: Với bất kỳ ngưỡng quyết định nào (threshold), model đều có thể điều chỉnh để đạt trade-off mong muốn giữa Precision và Recall.
+
+![Accuracy vs Support](figures/06_accuracy_vs_support.png)
+
+**Hình 3.8**: Accuracy theo Support size - Cho thấy mối quan hệ giữa số lượng samples và accuracy cho từng category. Normal có accuracy cao nhất (99.95%) dù support nhỏ nhất (2000).
 
 ## 3.4. So sánh với các phương pháp liên quan
 
@@ -391,6 +425,10 @@ Diện tích dưới đường cong ROC gần như hoàn hảo (1.0), cho thấy
 
 - ❌ **Memory cao**: 33GB (cao nhất trong bảng)
 - ❌ **Phức tạp hơn**: Cần maintain 2 models thay vì 1
+
+![Stage Comparison](figures/04_stage_comparison.png)
+
+**Hình 3.9**: So sánh hiệu năng Stage 1 vs Stage 2 - Stage 1 (binary) đạt accuracy cao hơn (99.26%) so với Stage 2 (multi-class, 97.58%) do bài toán đơn giản hơn.
 
 ### 3.4.2. Ablation Study
 
