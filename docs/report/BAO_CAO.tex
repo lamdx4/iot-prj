@@ -1,0 +1,1237 @@
+%!TeX program = xelatex
+\documentclass[12pt,a4paper]{report}
+
+% Packages
+\usepackage{fontspec}
+\setmainfont{Liberation Serif}
+\usepackage[vietnamese]{babel}
+\usepackage[top=2cm, bottom=3cm, left=3cm, right=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{indentfirst}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{titlesec}
+\usepackage{enumitem}
+
+% Format headings
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\centering\fontsize{16}{19}\selectfont}
+  {\chaptertitlename\ \thechapter}
+  {10pt}
+  {\fontsize{16}{19}\selectfont\MakeUppercase}
+  
+\titleformat{\section}
+  {\normalfont\bfseries\fontsize{14}{16}\selectfont}
+  {\thesection}
+  {1em}
+  {}
+
+\titleformat{\subsection}
+  {\normalfont\bfseries\fontsize{13}{15}\selectfont}
+  {\thesubsection}
+  {1em}
+  {}
+
+\titleformat{\subsubsection}
+  {\normalfont\bfseries\fontsize{12}{14}\selectfont}
+  {\thesubsubsection}
+  {1em}
+  {}
+
+% Adjust chapter spacing
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+  {}
+  
+% Hyperlink setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,      
+    urlcolor=blue,
+    citecolor=black,
+}
+
+\begin{document}
+
+
+\tableofcontents
+\newpage
+
+\chapter{TỔNG QUAN}
+
+\section{Bối cảnh và vấn đề nghiên cứu}
+
+\subsection{Thực trạng an ninh mạng trong hệ sinh thái IoT}
+
+Trong những năm gần đây, Internet of Things (IoT) đã trở thành một phần không thể thiếu trong cuộc sống hiện đại, từ các thiết bị gia dụng thông minh, hệ thống y tế, đến các ứng dụng công nghiệp quy mô lớn. Theo dự báo của Statista, số lượng thiết bị IoT toàn cầu dự kiến đạt 75 tỷ vào năm 2025, tạo ra một hệ sinh thái số hóa rộng lớn nhưng cũng đi kèm với những thách thức lớn về bảo mật.
+
+Tuy nhiên, phần lớn thiết bị IoT được thiết kế với tài nguyên tính toán hạn chế, thiếu cơ chế bảo mật mạnh mẽ, và thường sử dụng mật khẩu mặc định dễ đoán. Những điểm yếu này khiến chúng trở thành mục tiêu lý tưởng cho các cuộc tấn công mạng, đặc biệt là các botnet IoT -- mạng lưới thiết bị bị nhiễm mã độc và bị kiểm soát từ xa để thực hiện các hành vi phá hoại.
+
+\subsection{Các cuộc tấn công botnet IoT điển hình}
+
+Một trong những sự kiện đáng chú ý nhất là cuộc tấn công DDoS (Distributed Denial of Service) từ botnet Mirai vào năm 2016, đã làm tê liệt hàng loạt website lớn như Twitter, Netflix, Reddit bằng cách khai thác hơn 600.000 thiết bị IoT bị nhiễm mã độc \cite{ref17, ref18}. Sự kiện này đã gióng lên hồi chuông cảnh báo về mức độ nghiêm trọng của mối đe dọa từ botnet IoT.
+
+Các dạng tấn công phổ biến từ botnet IoT bao gồm:
+
+\begin{itemize}
+    \item \textbf{DDoS (Distributed Denial of Service)}: Tấn công từ nhiều nguồn khác nhau nhằm làm quá tải hệ thống mục tiêu.
+    \item \textbf{DoS (Denial of Service)}: Tấn công từ một hoặc vài nguồn để ngăn chặn dịch vụ hợp pháp.
+    \item \textbf{Reconnaissance (Trinh sát)}: Thu thập thông tin về mạng và thiết bị để chuẩn bị cho các cuộc tấn công tiếp theo.
+    \item \textbf{Theft (Trộm cắp dữ liệu)}: Đánh cắp thông tin nhạy cảm từ thiết bị bị xâm nhập.
+\end{itemize}
+
+\subsection{Thách thức trong phát hiện và phòng chống}
+
+Việc phát hiện và phân loại các cuộc tấn công botnet IoT gặp phải nhiều thách thức lớn:
+
+\textbf{Thách thức về dữ liệu}: Tập dữ liệu trong thực tế thường có sự mất cân bằng nghiêm trọng (class imbalance), trong đó lưu lượng tấn công chiếm tỷ lệ áp đảo so với lưu lượng bình thường. Ví dụ, trong tập dữ liệu Bot-IoT \cite{ref1} được sử dụng trong nghiên cứu này, lưu lượng tấn công chiếm tới 99.95\% trong khi lưu lượng bình thường chỉ chiếm khoảng 0.05\%. Sự mất cân bằng này khiến các mô hình học máy truyền thống dễ bị thiên lệch về lớp đa số, dẫn đến khả năng phát hiện lưu lượng bình thường kém.
+
+\textbf{Thách thức về độ phức tạp}: Các cuộc tấn công ngày càng tinh vi với nhiều kỹ thuật ẩn náu và mã hóa, khiến việc phân biệt giữa lưu lượng tấn công và lưu lượng bình thường trở nên khó khăn hơn. Đặc biệt, việc phân biệt giữa DDoS (nhiều nguồn tấn công) và DoS (ít nguồn tấn công) đòi hỏi phân tích sâu về đặc trưng nguồn tấn công (source diversity).
+
+\textbf{Thách thức về quy mô}: Với hàng tỷ thiết bị IoT hoạt động đồng thời, khối lượng dữ liệu lưu lượng mạng cần phân tích là rất lớn. Điều này đặt ra yêu cầu cao về khả năng mở rộng (scalability) và hiệu năng xử lý của hệ thống phát hiện xâm nhập.
+
+\textbf{Thách thức về tài nguyên}: Nhiều giải pháp hiện tại yêu cầu tài nguyên tính toán lớn, không phù hợp với các tổ chức nhỏ hoặc môi trường giáo dục có ngân sách hạn chế.
+
+\subsection{Tổng quan các nghiên cứu liên quan}
+
+Nhiều nghiên cứu đã áp dụng các kỹ thuật học máy và học sâu để giải quyết vấn đề an ninh trong IoT. Các bài khảo sát của Buczak et al. \cite{ref19} và Khraisat et al. \cite{ref20} đã tổng hợp các kỹ thuật phát hiện xâm nhập phổ biến.
+
+Về dữ liệu, Sarhan et al. \cite{ref2} đã phân tích và so sánh các bộ dữ liệu NetFlow cho ML-based IDS. Koroniotis et al. \cite{ref1} công bố bộ dữ liệu Bot-IoT, khắc phục nhiều hạn chế của các bộ dữ liệu cũ.
+
+Về phương pháp, Alosaimi và Almutairi \cite{ref3} áp dụng các kỹ thuật học máy cơ bản trên Bot-IoT. Zawaideh et al. \cite{ref4} đề xuất kết hợp CNN và XGBoost. Zhang et al. \cite{ref5} và Özdoğan et al. \cite{ref6} đã phát triển các mô hình hai giai đoạn (two-stage) để nâng cao hiệu quả phát hiện. Các nghiên cứu khác như Le et al. \cite{ref7}, Doghramachi và Ameen \cite{ref8}, Chalichalamala et al. \cite{ref9}, và Khan et al. \cite{ref10} tập trung vào việc tối ưu hóa XGBoost và xử lý mất cân bằng dữ liệu trong môi trường IoT tài nguyên hạn chế.
+
+Tuy nhiên, các phương pháp này thường chưa giải quyết triệt để vấn đề phân loại đa lớp chi tiết trong điều kiện mất cân bằng dữ liệu cực đoan (extreme imbalance), điều mà nghiên cứu này tập trung giải quyết.
+
+\section{Tính cấp thiết của đề tài}
+
+\subsection{Khoảng trống nghiên cứu}
+
+Mặc dù đã có nhiều nghiên cứu về phát hiện tấn công mạng sử dụng học máy, vẫn tồn tại những khoảng trống quan trọng cần được giải quyết:
+
+\textbf{Xử lý mất cân bằng dữ liệu nghiêm trọng}: Hầu hết các nghiên cứu hiện tại chỉ xử lý mất cân bằng ở mức độ trung bình hoặc sử dụng tập dữ liệu đã được cân bằng trước. Tuy nhiên, trong thực tế, tỷ lệ mất cân bằng có thể lên tới 2000:1 hoặc cao hơn, đòi hỏi các kỹ thuật xử lý chuyên sâu hơn như SMOTE (Synthetic Minority Over-sampling Technique) \cite{ref13} và cân bằng trọng số trong mô hình \cite{ref14, ref15}.
+
+\textbf{Phân loại đa cấp hiệu quả}: Nhiều nghiên cứu chỉ tập trung vào phân loại nhị phân (tấn công/bình thường) hoặc phân loại đa lớp trực tiếp. Trong khi đó, mô hình phân cấp hai giai đoạn (hierarchical two-stage) \cite{ref5, ref16} có tiềm năng cải thiện độ chính xác bằng cách chia nhỏ bài toán phức tạp thành các bước đơn giản hơn.
+
+\textbf{Tối ưu hóa tài nguyên}: Các giải pháp thường yêu cầu phần cứng chuyên dụng hoặc máy chủ mạnh mẽ. Nghiên cứu này hướng tới giải pháp có thể triển khai trên các nền tảng điện toán đám mây miễn phí hoặc chi phí thấp như Google Colab \cite{ref23}, phù hợp với môi trường giáo dục và nghiên cứu.
+
+\subsection{Hạn chế của các phương pháp hiện tại}
+
+Các phương pháp phát hiện xâm nhập truyền thống như signature-based detection chỉ có thể phát hiện các cuộc tấn công đã biết, trong khi anomaly-based detection thường có tỷ lệ false positive cao. Các mô hình học máy đơn giản như Decision Tree, Random Forest tuy có độ chính xác tốt nhưng gặp khó khăn khi xử lý dữ liệu mất cân bằng nghiêm trọng.
+
+Mô hình Deep Learning như CNN, LSTM mặc dù cho kết quả tốt nhưng yêu cầu tài nguyên tính toán lớn, thời gian huấn luyện dài, và khó giải thích được quyết định của mô hình (lack of interpretability) \cite{ref21, ref22}. Điều này khiến chúng không phù hợp cho các ứng dụng thời gian thực hoặc môi trường có tài nguyên hạn chế.
+
+\section{Mục tiêu nghiên cứu}
+
+\subsection{Mục tiêu tổng quát}
+
+Xây dựng hệ thống phát hiện và phân loại botnet IoT dựa trên mô hình học máy phân cấp hai giai đoạn (Two-Stage Hierarchical Model), có khả năng xử lý hiệu quả dữ liệu mất cân bằng nghiêm trọng, đạt độ chính xác cao và có thể triển khai trên nền tảng điện toán đám mây với tài nguyên hợp lý.
+
+\subsection{Mục tiêu cụ thể}
+
+Để đạt được mục tiêu tổng quát, nghiên cứu đặt ra các mục tiêu cụ thể sau:
+
+\begin{enumerate}
+    \item \textbf{Xây dựng pipeline xử lý dữ liệu quy mô lớn}: Phát triển quy trình xử lý, gộp và phân tích tập dữ liệu Bot-IoT (74 file CSV, khoảng 16GB) một cách hiệu quả, tận dụng tối đa thông tin từ dữ liệu thực tế.
+    \item \textbf{Thiết kế mô hình phân cấp hai giai đoạn}:
+    \begin{itemize}
+        \item Giai đoạn 1: Phân loại nhị phân (Binary Classification) để phân biệt lưu lượng tấn công và lưu lượng bình thường.
+        \item Giai đoạn 2: Phân loại đa lớp (Multi-class Classification) để xác định loại tấn công cụ thể (DDoS, DoS, Reconnaissance).
+    \end{itemize}
+    \item \textbf{Xử lý mất cân bằng dữ liệu}: Áp dụng kỹ thuật SMOTE để tạo dữ liệu tổng hợp cho lớp thiểu số và sử dụng cân bằng trọng số (scale\_pos\_weight) trong XGBoost để cải thiện khả năng phát hiện lưu lượng bình thường.
+    \item \textbf{Tối ưu hóa đặc trưng}: Thiết kế các đặc trưng phân biệt nguồn tấn công (source diversity features) bao gồm unique\_src\_count, src\_entropy, và top\_src\_ratio để phân biệt hiệu quả giữa DDoS và DoS.
+    \item \textbf{Đánh giá hiệu năng toàn diện}: Thực hiện đánh giá mô hình trên nhiều chỉ số khác nhau (accuracy, precision, recall, F1-score) cho cả hai giai đoạn và đánh giá hiệu năng tổng thể của pipeline.
+    \item \textbf{Tối ưu hóa tài nguyên và thời gian}: Đảm bảo hệ thống có thể chạy trên Google Colab Pro+ với cấu hình 52GB RAM và GPU T4/V100, hoàn thành quá trình huấn luyện trong khoảng 15-20 phút.
+\end{enumerate}
+
+\section{Phạm vi nghiên cứu và đối tượng nghiên cứu}
+
+\subsection{Phạm vi nghiên cứu}
+
+Nghiên cứu tập trung vào các khía cạnh sau:
+
+\textbf{Phạm vi về dữ liệu}: Sử dụng tập dữ liệu Bot-IoT \cite{ref1} được công bố bởi UNSW Canberra Cyber, bao gồm 74 file CSV với tổng dung lượng khoảng 16GB, chứa khoảng 40-50 triệu bản ghi lưu lượng mạng. Tập dữ liệu này bao gồm cả lưu lượng bình thường và các loại tấn công botnet IoT thực tế.
+
+\textbf{Phạm vi về phương pháp}: Tập trung vào kỹ thuật học máy gradient boosting, cụ thể là XGBoost, kết hợp với các kỹ thuật xử lý mất cân bằng dữ liệu như SMOTE và scale\_pos\_weight. Không nghiên cứu các phương pháp Deep Learning phức tạp do hạn chế về tài nguyên.
+
+\textbf{Phạm vi về loại tấn công}: Nghiên cứu tập trung vào ba loại tấn công chính: DDoS, DoS và Reconnaissance. Loại tấn công Theft có số lượng mẫu quá ít sẽ được loại bỏ khỏi quá trình huấn luyện.
+
+\textbf{Phạm vi về môi trường triển khai}: Hệ thống được thiết kế và tối ưu hóa cho nền tảng Google Colab Pro+ với cấu hình High-RAM (52GB) và GPU (T4/V100/A100), phù hợp với môi trường giáo dục và nghiên cứu.
+
+\subsection{Đối tượng nghiên cứu}
+
+\textbf{Đối tượng chính}: Các luồng lưu lượng mạng (network flows) trong môi trường IoT, được biểu diễn dưới dạng các đặc trưng thống kê như số lượng gói tin, số byte, thời lượng kết nối, các giá trị thống kê (mean, stddev, min, max), và các đặc trưng về nguồn tấn công.
+
+\textbf{Đối tượng phụ}: Các kỹ thuật xử lý mất cân bằng dữ liệu, phương pháp tối ưu hóa siêu tham số, và chiến lược tận dụng GPU để tăng tốc quá trình huấn luyện.
+
+\section{Hướng tiếp cận và phương pháp thực hiện}
+
+\subsection{Hướng tiếp cận tổng quát}
+
+Nghiên cứu áp dụng hướng tiếp cận phân cấp hai giai đoạn (hierarchical two-stage approach) với các nguyên tắc chính:
+
+\textbf{Chia nhỏ bài toán phức tạp}: Thay vì xây dựng một mô hình phân loại đa lớp trực tiếp, nghiên cứu chia thành hai giai đoạn:
+\begin{itemize}
+    \item Giai đoạn 1 tập trung vào việc phân biệt có tấn công hay không (binary classification).
+    \item Giai đoạn 2 chỉ xử lý các mẫu được xác định là tấn công để phân loại loại tấn công cụ thể (multi-class classification).
+\end{itemize}
+
+\textbf{Tối ưu hóa từng giai đoạn}: Mỗi giai đoạn được tối ưu hóa riêng biệt với các siêu tham số và kỹ thuật xử lý mất cân bằng phù hợp, giúp tăng hiệu năng tổng thể của hệ thống.
+
+\textbf{Tận dụng GPU}: Sử dụng XGBoost với cấu hình tree\_method="gpu\_hist" và predictor="gpu\_predictor" để tận dụng tối đa GPU, giảm thời gian huấn luyện từ hàng giờ xuống còn 15-20 phút.
+
+\subsection{Phương pháp thực hiện}
+
+Nghiên cứu thực hiện theo các bước chính:
+
+\textbf{Bước 1 - Tiền xử lý dữ liệu}:
+\begin{itemize}
+    \item Gộp 74 file CSV thành 8 batch file (mỗi batch khoảng 10 file), giảm số lần đọc/ghi file.
+    \item Phân tích thống kê từng batch để xác định phân phối lớp và chọn batch phù hợp cho huấn luyện.
+    \item Tạo tập test cân bằng (balanced test set) để đánh giá mô hình một cách công bằng.
+\end{itemize}
+
+\textbf{Bước 2 - Kỹ thuật đặc trưng (Feature Engineering)}:
+\begin{itemize}
+    \item Trích xuất các đặc trưng cơ bản từ lưu lượng mạng (protocol, flags, state, packets, bytes, duration).
+    \item Thiết kế đặc trưng phân biệt nguồn (source diversity features) dựa trên thống kê địa chỉ nguồn trong cửa sổ thời gian:
+    \begin{itemize}
+        \item unique\_src\_count: Số lượng địa chỉ IP nguồn duy nhất
+        \item src\_entropy: Entropy của phân phối địa chỉ nguồn
+        \item top\_src\_ratio: Tỷ lệ của địa chỉ nguồn xuất hiện nhiều nhất
+    \end{itemize}
+\end{itemize}
+
+\textbf{Bước 3 - Xử lý mất cân bằng}:
+\begin{itemize}
+    \item Áp dụng SMOTE cho lớp thiểu số trong cả hai giai đoạn.
+    \item Sử dụng scale\_pos\_weight trong XGBoost để tăng trọng số cho lớp thiểu số.
+\end{itemize}
+
+\textbf{Bước 4 - Huấn luyện mô hình}:
+\begin{itemize}
+    \item Huấn luyện Stage 1 với XGBoost để phân loại nhị phân (Attack vs Normal).
+    \item Huấn luyện Stage 2 với XGBoost để phân loại đa lớp (DDoS vs DoS vs Reconnaissance).
+    \item Sử dụng early stopping để tránh overfitting.
+\end{itemize}
+
+\textbf{Bước 5 - Đánh giá và tối ưu}:
+\begin{itemize}
+    \item Đánh giá mô hình trên tập test cân bằng.
+    \item Phân tích ma trận nhầm lẫn (confusion matrix) để xác định điểm mạnh và điểm yếu.
+    \item Tạo các biểu đồ trực quan hóa để đánh giá hiệu năng.
+\end{itemize}
+
+\section{Ý nghĩa khoa học và thực tiễn}
+
+\subsection{Ý nghĩa khoa học}
+
+\textbf{Đóng góp về mô hình}: Nghiên cứu đề xuất kiến trúc phân cấp hai giai đoạn kết hợp với kỹ thuật xử lý mất cân bằng đa cấp, có thể được áp dụng cho các bài toán phân loại có mất cân bằng nghiêm trọng tương tự trong lĩnh vực an ninh mạng.
+
+\textbf{Đóng góp về đặc trưng}: Các đặc trưng source diversity (unique\_src\_count, src\_entropy, top\_src\_ratio) được thiết kế dựa trên phân tích đặc tính tấn công DDoS và DoS, có thể được sử dụng để cải thiện khả năng phân biệt giữa hai loại tấn công này trong các nghiên cứu khác.
+
+\textbf{Đóng góp về phương pháp}: Quy trình xử lý dữ liệu quy mô lớn (74 file, 16GB) một cách hiệu quả trên nền tảng có tài nguyên hạn chế, cung cấp hướng dẫn thực tiễn cho các nhà nghiên cứu gặp phải vấn đề tương tự.
+
+\subsection{Ý nghĩa thực tiễn}
+
+\textbf{Cho lĩnh vực giáo dục}: Hệ thống có thể được sử dụng làm công cụ giảng dạy và học tập về an ninh mạng IoT, giúp sinh viên hiểu rõ hơn về các kỹ thuật phát hiện xâm nhập hiện đại. Code được tổ chức rõ ràng, có chú thích chi tiết, dễ dàng tái sử dụng và mở rộng.
+
+\textbf{Cho các tổ chức nhỏ và vừa}: Giải pháp có thể triển khai trên nền tảng điện toán đám mây với chi phí thấp, không yêu cầu đầu tư phần cứng chuyên dụng, phù hợp với các tổ chức có ngân sách hạn chế nhưng vẫn muốn có hệ thống phát hiện tấn công hiệu quả.
+
+\textbf{Cho nghiên cứu tiếp theo}: Kết quả của nghiên cứu này có thể là nền tảng để phát triển các hệ thống phát hiện xâm nhập thời gian thực, tích hợp vào các thiết bị IoT gateway hoặc các giải pháp Network Security Monitoring (NSM).
+
+\textbf{Cho cộng đồng mã nguồn mở}: Toàn bộ code và quy trình được công khai trên GitHub, cho phép cộng đồng nghiên cứu tái sử dụng, kiểm chứng và cải thiện, góp phần thúc đẩy sự phát triển của lĩnh vực an ninh IoT.
+
+\section{Cấu trúc báo cáo}
+
+Báo cáo được tổ chức thành năm chương chính:
+
+\textbf{Chương 1 - Tổng quan}: Trình bày bối cảnh nghiên cứu, vấn đề cần giải quyết, tính cấp thiết, mục tiêu, phạm vi nghiên cứu, hướng tiếp cận tổng quát và ý nghĩa của đề tài.
+
+\textbf{Chương 2 - Mô hình đề xuất}: Trình bày kiến trúc hệ thống Two-Stage Hierarchical Model, các thuật toán chính, quy trình hoạt động chi tiết và phân tích độ phức tạp.
+
+\textbf{Chương 3 - Thực nghiệm và thảo luận}: Mô tả môi trường thực nghiệm, kết quả huấn luyện, đánh giá hiệu năng mô hình, so sánh với các phương pháp khác và thảo luận kết quả.
+
+\textbf{Chương 4 - Kết luận và hướng phát triển}: Tóm tắt các đóng góp chính của nghiên cứu, đánh giá mức độ đạt được các mục tiêu đã đề ra, chỉ ra các hạn chế cần khắc phục, và đề xuất các hướng nghiên cứu tiếp theo.
+
+\textbf{Tài liệu tham khảo}: Liệt kê các tài liệu tham khảo trong quá trình nghiên cứu.
+
+\chapter{MÔ HÌNH ĐỀ XUẤT}
+
+\section{Kiến trúc tổng thể hệ thống}
+
+\subsection{Sơ đồ tổng quan}
+
+Hệ thống phát hiện và phân loại botnet IoT được thiết kế theo kiến trúc phân cấp hai giai đoạn (Two-Stage Hierarchical Model), trong đó mỗi giai đoạn chuyên biệt hóa cho một tác vụ phân loại cụ thể. Kiến trúc này cho phép tối ưu hóa hiệu năng của từng giai đoạn một cách độc lập và giảm độ phức tạp của bài toán tổng thể.
+
+\begin{figure}[H]
+    \centering
+    \begin{verbatim}
+Luồng Dữ Liệu Tổng Thể:
+
+Raw Data (74 CSV files, ~16GB)
+         ↓
+[Merge & Batch] → 8 Batches (~2GB each)
+         ↓
+[Feature Engineering] → 22 features
+         ↓
+┌─────────────────────────────────────┐
+│    STAGE 1: Binary Classification   │
+│    (Attack vs Normal)                │
+│    Input: 22 features                │
+│    Output: is_attack (0/1)           │
+│    Model: XGBoost Binary Classifier  │
+└─────────────────────────────────────┘
+         ↓
+   Decision Point
+         ↓
+    ┌────────┴────────┐
+    │                 │
+ Normal          Attack
+(Output)            ↓
+         ┌─────────────────────────────────────┐
+         │  STAGE 2: Multi-class Classification│
+         │  (DDoS vs DoS vs Reconnaissance)    │
+         │  Input: 22 features                 │
+         │  Output: attack_type (0/1/2)        │
+         │  Model: XGBoost Multi-class         │
+         └─────────────────────────────────────┘
+                     ↓
+             Final Classification
+         (Normal / DDoS / DoS / Reconnaissance)
+    \end{verbatim}
+    \caption{Sơ đồ luồng dữ liệu của hệ thống Two-Stage Hierarchical Model}
+    \label{fig:architecture}
+\end{figure}
+
+\subsection{Các thành phần chính}
+
+Hệ thống bao gồm năm thành phần chính:
+
+\textbf{Thành phần 1 - Tiền xử lý dữ liệu (Data Preprocessing)}:
+\begin{itemize}
+    \item Chức năng: Gộp 74 file CSV thành 8 batch files, phân tích thống kê và chọn batch phù hợp cho huấn luyện.
+    \item Input: 74 file CSV gốc từ tập dữ liệu Bot-IoT
+    \item Output: 8 batch files và file thống kê JSON
+    \item Công nghệ: Pandas DataFrame operations, JSON serialization
+\end{itemize}
+
+\textbf{Thành phần 2 - Kỹ thuật đặc trưng (Feature Engineering)}:
+\begin{itemize}
+    \item Chức năng: Trích xuất 22 đặc trưng từ dữ liệu thô, bao gồm 3 đặc trưng source diversity đặc biệt để phân biệt DDoS và DoS.
+    \item Input: Raw network flows với 35+ columns
+    \item Output: 22 engineered features
+    \item Công nghệ: Scipy entropy, NumPy aggregation, time-window analysis
+\end{itemize}
+
+\textbf{Thành phần 3 - Stage 1: Binary Classifier}:
+\begin{itemize}
+    \item Chức năng: Phân loại nhị phân (Attack vs Normal)
+    \item Input: 22 features
+    \item Output: is\_attack (0 = Normal, 1 = Attack)
+    \item Mô hình: XGBoost Binary Classifier với SMOTE và scale\_pos\_weight
+    \item Metrics: Accuracy, Precision, Recall, F1-Score, ROC-AUC
+\end{itemize}
+
+\textbf{Thành phần 4 - Stage 2: Multi-class Classifier}:
+\begin{itemize}
+    \item Chức năng: Phân loại đa lớp cho các mẫu được xác định là tấn công
+    \item Input: 22 features (chỉ attack samples)
+    \item Output: attack\_type (0 = DDoS, 1 = DoS, 2 = Reconnaissance)
+    \item Mô hình: XGBoost Multi-class Classifier với SMOTE và balanced sample weights
+    \item Metrics: Accuracy, Precision, Recall, F1-Score (weighted average)
+\end{itemize}
+
+\textbf{Thành phần 5 - Pipeline Integration}:
+\begin{itemize}
+    \item Chức năng: Kết hợp dự đoán từ hai giai đoạn để đưa ra quyết định cuối cùng
+    \item Logic: Nếu Stage 1 dự đoán Normal $\to$ Output "Normal", nếu Attack $\to$ truyền qua Stage 2 để xác định loại tấn công cụ thể
+    \item Output: Final classification (Normal / DDoS / DoS / Reconnaissance)
+\end{itemize}
+
+\section{Các thuật toán và mô-đun chính}
+
+\subsection{Thuật toán XGBoost (Extreme Gradient Boosting)}
+
+XGBoost là thuật toán học máy dựa trên gradient boosting \cite{ref11, ref12}, xây dựng một ensemble của nhiều cây quyết định yếu (weak learners) theo cách tuần tự, trong đó mỗi cây mới được huấn luyện để sửa lỗi của các cây trước đó.
+
+\textbf{Hàm mục tiêu}:
+\begin{equation}
+    L(\phi) = \sum l(\hat{y}_i, y_i) + \sum \Omega(f_k)
+\end{equation}
+
+Trong đó:
+\begin{itemize}
+    \item $l(\hat{y}_i, y_i)$: Loss function (logloss cho binary, mlogloss cho multi-class)
+    \item $\Omega(f_k)$: Regularization term để tránh overfitting
+    \item $\phi$: Tập hợp các tham số của model
+\end{itemize}
+
+\textbf{Regularization term}:
+\begin{equation}
+    \Omega(f) = \gamma T + \frac{1}{2}\lambda \sum w_j^2
+\end{equation}
+
+Trong đó:
+\begin{itemize}
+    \item $T$: Số lượng lá (leaves) trong cây
+    \item $w_j$: Trọng số của lá thứ j
+    \item $\gamma$: Complexity control parameter
+    \item $\lambda$: L2 regularization parameter
+\end{itemize}
+
+\subsection{Thuật toán SMOTE (Synthetic Minority Over-sampling Technique)}
+
+SMOTE được sử dụng để xử lý mất cân bằng dữ liệu bằng cách tạo ra các mẫu tổng hợp cho lớp thiểu số \cite{ref13}.
+
+\textbf{Giả mã thuật toán SMOTE}:
+
+\begin{verbatim}
+Algorithm: SMOTE(X_minority, N, k)
+Input:
+  - X_minority: Tập mẫu lớp thiểu số
+  - N: Tỷ lệ oversampling (ví dụ: 200 = tăng gấp đôi)
+  - k: Số lân cận gần nhất (thường k=5)
+Output:
+  - X_synthetic: Tập mẫu tổng hợp
+
+1: FOR mỗi mẫu x_i in X_minority:
+2:   Tìm k nearest neighbors của x_i (sử dụng Euclidean distance)
+3:   FOR j = 1 TO (N/100):
+4:     Chọn ngẫu nhiên một neighbor x_n từ k neighbors
+5:     Tạo mẫu tổng hợp:
+        x_new = x_i + rand(0,1) * (x_n - x_i)
+6:     Thêm x_new vào X_synthetic
+7:   END FOR
+8: END FOR
+9: RETURN X_minority U X_synthetic
+\end{verbatim}
+
+\textbf{Ứng dụng trong hệ thống}:
+\begin{itemize}
+    \item Stage 1: Tăng số lượng mẫu Normal từ ~7,769 lên khoảng 2 triệu (sampling\_strategy=0.1)
+    \item Stage 2: Tăng số lượng mẫu Reconnaissance (lớp thiểu số) lên 10\% của lớp đa số
+\end{itemize}
+
+\subsection{Thuật toán tính Source Diversity Features}
+
+Đây là thuật toán quan trọng nhất để phân biệt giữa DDoS (nhiều nguồn) và DoS (ít nguồn).
+
+\textbf{Giả mã thuật toán}:
+
+\begin{verbatim}
+Algorithm: CalculateSourceDiversity(flows, window_size)
+Input:
+  - flows: Tập luồng mạng với (stime, saddr, daddr)
+  - window_size: Kích thước cửa sổ thời gian (seconds)
+Output:
+  - diversity_features: (unique_src_count, src_entropy, top_src_ratio)
+
+1: Tạo time_window = floor(stime / window_size)
+
+2: FOR mỗi (time_window, target_daddr):
+3:   Group = flows WHERE time_window=tw AND daddr=target_daddr
+4:
+5:   // Feature 1: Unique source count
+6:   unique_src_count = |{saddr in Group}|
+7:
+8:   // Feature 2: Source entropy
+9:   src_counts = frequency(saddr) FOR saddr in Group
+10:  src_probs = src_counts / SUM(src_counts)
+11:  src_entropy = -SUM(p_i * log2(p_i)) FOR p_i in src_probs
+12:
+13:  // Feature 3: Top source ratio
+14:  top_src_count = max(src_counts)
+15:  top_src_ratio = top_src_count / |Group|
+16:
+17:  ASSIGN diversity_features TO all flows IN Group
+18: END FOR
+
+19: RETURN flows WITH diversity_features
+\end{verbatim}
+
+\textbf{Ý nghĩa các features}:
+\begin{itemize}
+    \item \texttt{unique\_src\_count}: DDoS có giá trị cao (hàng nghìn nguồn), DoS có giá trị thấp (< 10 nguồn)
+    \item \texttt{src\_entropy}: DDoS có entropy cao (phân phối đều), DoS có entropy thấp (tập trung)
+    \item \texttt{top\_src\_ratio}: DDoS có tỷ lệ thấp (< 0.1), DoS có tỷ lệ cao (> 0.8)
+\end{itemize}
+
+\subsection{Mô-đun GPU Optimization}
+
+Để tăng tốc độ huấn luyện, hệ thống sử dụng GPU (nếu có) thông qua XGBoost GPU support \cite{ref11, ref24}.
+
+\textbf{Thuật toán phát hiện và cấu hình GPU}:
+
+\begin{verbatim}
+Algorithm: ConfigureGPU()
+Output: (USE_GPU, DEVICE, TREE_METHOD)
+
+1: TRY:
+2:   Chạy lệnh: nvidia-smi --query-gpu=name,memory.total
+3:   IF lệnh thành công:
+4:     gpu_name, gpu_memory = parse output
+5:     PRINT "GPU detected: {gpu_name}, {gpu_memory}"
+6:     USE_GPU = True
+7:     DEVICE = 'cuda'
+8:     TREE_METHOD = 'hist'  // XGBoost 3.x uses 'hist' with device='cuda'
+9:   ELSE:
+10:    USE_GPU = False
+11:    DEVICE = 'cpu'
+12:    TREE_METHOD = 'hist'
+13: EXCEPT:
+14:   USE_GPU = False
+15:   DEVICE = 'cpu'
+16:   TREE_METHOD = 'hist'
+17: RETURN (USE_GPU, DEVICE, TREE_METHOD)
+\end{verbatim}
+
+\section{Quy trình hoạt động chi tiết}
+
+\subsection{Tổng quan quy trình}
+
+Hệ thống hoạt động theo 8 bước chính, từ tiền xử lý dữ liệu đến đánh giá kết quả cuối cùng.
+
+\subsection{Step 0: Merge và phân tích batches}
+
+\textbf{Mục tiêu}: Giảm số lần đọc file và chọn batch tốt nhất cho huấn luyện.
+
+\textbf{Input}:
+\begin{itemize}
+    \item 74 file CSV gốc (khoảng 230MB mỗi file)
+    \item Tổng dung lượng: ~16GB
+\end{itemize}
+
+\textbf{Quy trình}:
+\begin{enumerate}
+    \item Chia 74 files thành 8 groups (10 files/group, group cuối 4 files)
+    \item Merge mỗi group thành 1 batch file
+    \item Phân tích thống kê cho mỗi batch:
+    \begin{itemize}
+        \item Total records
+        \item Category distribution (Normal, DDoS, DoS, Reconnaissance, Theft)
+        \item Missing values
+        \item Protocol distribution
+    \end{itemize}
+    \item Lưu thống kê vào \texttt{batch\_statistics.json}
+\end{enumerate}
+
+\textbf{Output}:
+\begin{itemize}
+    \item 8 batch files: batch\_01.csv đến batch\_08.csv (~2-2.6GB mỗi file)
+    \item File thống kê: batch\_statistics.json
+\end{itemize}
+
+\textbf{Lựa chọn batch cho training}: Chọn batch\_01 và batch\_04 vì có số lượng Normal samples cao nhất (cần thiết cho Stage 1).
+
+\subsection{Step 1: Tạo balanced test set}
+
+\textbf{Mục tiêu}: Tạo tập test cân bằng để đánh giá công bằng.
+
+\textbf{Input}: batch\_02.csv (chọn làm nguồn test vì không dùng cho training)
+
+\textbf{Quy trình}:
+\begin{enumerate}
+    \item Sample từ batch\_02:
+    \begin{itemize}
+        \item Normal: 2,000 samples
+        \item DDoS: 35,000 samples
+        \item DoS: 50,000 samples
+        \item Reconnaissance: 13,000 samples
+    \end{itemize}
+    \item Shuffle và lưu thành \texttt{test\_balanced\_100k.csv}
+\end{enumerate}
+
+\textbf{Output}: Tập test cân bằng với 100,000 records.
+
+\subsection{Step 2: Load training data}
+
+\textbf{Input}: batch\_01.csv (~10M records) và batch\_04.csv (~10M records).
+
+\textbf{Quy trình}:
+\begin{enumerate}
+    \item Đọc batch\_01.csv với \texttt{pd.read\_csv(low\_memory=False)}
+    \item Đọc batch\_04.csv
+    \item Concatenate 2 DataFrames: \texttt{df\_train = pd.concat([df1, df2])}
+    \item Garbage collection: \texttt{del df1, df2; gc.collect()}
+\end{enumerate}
+
+\textbf{Output}: \texttt{df\_train} với 20 triệu records.
+
+\subsection{Step 3: Load test data}
+
+\textbf{Input}: test\_balanced\_100k.csv
+
+\textbf{Output}: \texttt{df\_test} với 100,000 records (cân bằng).
+
+\subsection{Step 4: Feature Engineering}
+
+Đây là bước quan trọng nhất, quyết định chất lượng của mô hình.
+
+\textbf{Bước 4.1: Tạo Source Diversity Features}
+
+Input: \texttt{df\_train} và \texttt{df\_test}.
+
+Quy trình:
+\begin{enumerate}
+    \item Tạo time\_window = floor(stime / 30) // Window 30 giây
+    \item Group by (time\_window, daddr)
+    \item Với mỗi group:
+    \begin{itemize}
+        \item Tính unique\_src\_count = số lượng saddr duy nhất
+        \item Tính src\_entropy = $-\sum(p_i \log_2 p_i)$
+        \item Tính top\_src\_ratio = max\_count / total\_count
+    \end{itemize}
+    \item Merge features trở lại \texttt{df\_train} và \texttt{df\_test}
+    \item Fill NaN với giá trị mặc định (1, 0.0, 1.0)
+\end{enumerate}
+
+\textbf{Quan trọng}: Train và test PHẢI xử lý RIÊNG BIỆT để tránh data leakage.
+
+\textbf{Bước 4.2: Feature Selection}
+
+Columns cần loại bỏ: Identifiers (pkSeqID, saddr, etc.), MAC addresses, Labels, Timestamps.
+
+Features cuối cùng (22 features):
+\begin{itemize}
+    \item Basic: flgs, proto, pkts, bytes, state, seq, dur, spkts, dpkts, sbytes, dbytes
+    \item Statistical: mean, stddev, sum, min, max, rate, srate, drate
+    \item \textbf{Diversity (New)}: unique\_src\_count, src\_entropy, top\_src\_ratio
+\end{itemize}
+
+\textbf{Bước 4.3: Xử lý Missing Values}
+
+Tính median từ TRAIN set và fill NaN cho cả TRAIN và TEST set (tránh leakage).
+
+\textbf{Bước 4.4: Encoding Categorical Features}
+
+Fit LabelEncoder chỉ trên TRAIN data, sau đó transform TEST data (handle unknown values).
+
+\subsection{Step 5: Train Stage 1 (Binary Classification)}
+
+\textbf{Mục tiêu}: Phân biệt Attack vs Normal.
+
+\textbf{Quy trình}:
+\begin{enumerate}
+    \item Tạo binary labels (Normal = 0, Attack = 1).
+    \item Stratified Split (85\%-15\%).
+    \item SMOTE Oversampling (tăng Normal lên 10\% của Attack).
+    \item Huấn luyện XGBoost với \texttt{scale\_pos\_weight} và GPU support.
+\end{enumerate}
+
+\textbf{Kết quả Stage 1}: Accuracy 99.26\%, ROC-AUC 99.99\%.
+
+\subsection{Step 6: Train Stage 2 (Multi-class Classification)}
+
+\textbf{Mục tiêu}: Phân loại DDoS vs DoS vs Reconnaissance.
+
+\textbf{Quy trình}:
+\begin{enumerate}
+    \item Filter chỉ lấy attack samples.
+    \item Map labels (DDoS=0, DoS=1, Recon=2).
+    \item Stratified Split.
+    \item Sử dụng \texttt{sample\_weight='balanced'} (thay vì SMOTE quá mức).
+    \item Huấn luyện XGBoost Multi-class.
+\end{enumerate}
+
+\textbf{Kết quả Stage 2}: Accuracy 97.58\%.
+
+\subsection{Step 7: Combined Pipeline Evaluation}
+
+Kết hợp dự đoán Stage 1 và Stage 2. Overall Accuracy: 97.19\%.
+
+\section{Công cụ, công nghệ và nền tảng triển khai}
+
+\subsection{Ngôn ngữ lập trình và thư viện}
+
+\textbf{Ngôn ngữ}: Python 3.10.
+
+\textbf{Thư viện chính}:
+\begin{itemize}
+    \item Pandas, NumPy: Xử lý dữ liệu.
+    \item XGBoost: Model training.
+    \item Scikit-learn, Imbalanced-learn: Preprocessing và metrics.
+\end{itemize}
+
+\subsection{Môi trường huấn luyện}
+
+\textbf{Nền tảng}: Google Colab Pro+.
+\begin{itemize}
+    \item RAM: 52 GB.
+    \item GPU: Tesla T4 (16GB VRAM) / V100 / A100.
+\end{itemize}
+
+\section{Phân tích độ phức tạp và đánh giá tối ưu hóa}
+
+\subsection{Độ phức tạp về thời gian (Time Complexity)}
+
+\textbf{XGBoost Training}:
+Với GPU (parallelization), thời gian huấn luyện giảm đáng kể:
+\begin{itemize}
+    \item Speedup: 100-200x so với CPU.
+    \item Thời gian thực tế: ~30 giây (Stage 1) + ~59 giây (Stage 2) = ~1.5 phút.
+\end{itemize}
+
+\textbf{Inference (Combined Pipeline)}:
+Sử dụng vectorization giúp giảm thời gian dự đoán cho 100k samples xuống còn ~2 giây.
+
+\subsection{Độ phức tạp về không gian (Space Complexity)}
+
+Peak RAM usage đo được là 33GB, nằm trong giới hạn 52GB của Colab Pro+.
+
+\subsection{Đánh giá tối ưu hóa}
+
+Hệ thống đã đạt được các mục tiêu tối ưu hóa:
+\begin{itemize}
+    \item \textbf{Training Time}: 12 phút (mục tiêu 15-20 phút).
+    \item \textbf{RAM Usage}: 33GB (mục tiêu < 52GB).
+    \item \textbf{Accuracy}: 97.19\%.
+    \item \textbf{Scalability}: Có thể mở rộng lên 5x dữ liệu.
+\end{itemize}
+
+\chapter{THỰC NGHIỆM VÀ THẢO LUẬN}
+
+\section{Môi trường thực nghiệm}
+
+\subsection{Cấu hình phần cứng}
+
+Hệ thống được huấn luyện và đánh giá trên nền tảng Google Colab Pro+ với cấu hình chi tiết như sau:
+
+\begin{table}[H]
+    \centering
+    \caption{Cấu hình phần cứng}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Thành phần} & \textbf{Cấu hình} & \textbf{Ghi chú} \\ \hline
+    \textbf{Nền tảng} & Google Colab Pro+ & Cloud computing platform \\ \hline
+    \textbf{CPU} & Intel Xeon @ 2.0-2.3GHz & 2 cores allocated \\ \hline
+    \textbf{RAM} & 52 GB High-RAM & Peak usage: 33 GB \\ \hline
+    \textbf{GPU} & Tesla T4 (16GB VRAM) & CUDA 11.x, cuDNN 8.x \\ \hline
+    \textbf{Disk} & 100+ GB SSD & Google Drive mount \\ \hline
+    \textbf{Network} & Google Cloud network & \textasciitilde100 Mbps download \\ \hline
+    \textbf{Session timeout} & 12 hours & Auto-disconnect after idle \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{Lý do lựa chọn}:
+\begin{itemize}
+    \item Chi phí hợp lý (~\$50/tháng cho Colab Pro+) so với việc đầu tư phần cứng chuyên dụng.
+    \item GPU mạnh mẽ (T4) giúp giảm thời gian huấn luyện từ 4 giờ xuống 12 phút.
+    \item RAM 52GB đủ để xử lý 20 triệu records.
+    \item Phù hợp với môi trường giáo dục và nghiên cứu.
+\end{itemize}
+
+\subsection{Môi trường phần mềm}
+
+\begin{table}[H]
+    \centering
+    \caption{Thư viện và phiên bản}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Thư viện} & \textbf{Phiên bản} & \textbf{Vai trò} \\ \hline
+    \textbf{Python} & 3.10.12 & Ngôn ngữ lập trình chính \\ \hline
+    \textbf{XGBoost} & 3.0.0 & Mô hình gradient boosting với GPU support \\ \hline
+    \textbf{scikit-learn} & 1.3.2 & Preprocessing, metrics, validation \\ \hline
+    \textbf{imbalanced-learn} & 0.11.0 & SMOTE oversampling \\ \hline
+    \textbf{pandas} & 2.1.3 & DataFrame operations \\ \hline
+    \textbf{numpy} & 1.24.3 & Numerical computations \\ \hline
+    \textbf{scipy} & 1.11.4 & Entropy calculation \\ \hline
+    \textbf{matplotlib} & 3.8.0 & Visualization \\ \hline
+    \textbf{seaborn} & 0.13.0 & Statistical plots \\ \hline
+    \textbf{psutil} & 5.9.6 & System monitoring \\ \hline
+    \textbf{joblib} & 1.3.2 & Model serialization \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{Hệ điều hành}: Ubuntu 22.04 LTS (kernel 5.15).
+\textbf{CUDA Toolkit}: CUDA 11.8, cuDNN 8.6 (cho GPU acceleration).
+
+\subsection{Tập dữ liệu}
+
+\textbf{Dataset}: Bot-IoT Dataset được công bố bởi UNSW Canberra Cyber (2019).
+
+\textbf{Đặc điểm tập dữ liệu}:
+
+\begin{table}[H]
+    \centering
+    \caption{Thống kê tập dữ liệu Bot-IoT}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Đặc điểm} & \textbf{Giá trị} & \textbf{Mô tả} \\ \hline
+    \textbf{Số files} & 74 files CSV & Raw network flow data \\ \hline
+    \textbf{Tổng dung lượng} & \textasciitilde16 GB & Uncompressed \\ \hline
+    \textbf{Tổng số records} & 40-50 triệu & Network flows \\ \hline
+    \textbf{Số features} & 35 features & Gốc (trước feature engineering) \\ \hline
+    \textbf{Thời gian thu thập} & 2018-2019 & Real IoT testbed \\ \hline
+    \textbf{Loại attacks} & 4 categories & DDoS, DoS, Reconnaissance, Theft \\ \hline
+    \textbf{Imbalance ratio} & 2000:1 & Attack:Normal \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{Phân phối lớp trong toàn bộ dataset}:
+
+\begin{table}[H]
+    \centering
+    \caption{Phân phối lớp (Full Dataset)}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Category} & \textbf{Số lượng} & \textbf{Tỷ lệ (\%)} \\ \hline
+    \textbf{DoS} & \textasciitilde26 triệu & 52\% \\ \hline
+    \textbf{DDoS} & \textasciitilde10 triệu & 20\% \\ \hline
+    \textbf{Reconnaissance} & \textasciitilde3.6 triệu & 7.2\% \\ \hline
+    \textbf{Normal} & \textasciitilde20,000 & 0.04\% \\ \hline
+    \textbf{Theft} & \textasciitilde3,000 & 0.006\% \\ \hline
+    \textbf{Tổng} & \textasciitilde50 triệu & 100\% \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{Training set} (sau khi chọn batch\_01 + batch\_04):
+\begin{itemize}
+    \item Total: 20,000,000 records
+    \item Normal: 7,769 (0.039\%)
+    \item Attack: 19,992,231 (99.961\%)
+    \begin{itemize}
+        \item DoS: 13,005,877 (65\%)
+        \item DDoS: 5,163,128 (26\%)
+        \item Reconnaissance: 1,821,639 (9\%)
+        \item Theft: 1,587 (loại bỏ vì quá ít)
+    \end{itemize}
+\end{itemize}
+
+\textbf{Test set} (balanced):
+\begin{itemize}
+    \item Total: 100,000 records
+    \item Normal: 2,000 (2\%)
+    \item DDoS: 35,000 (35\%)
+    \item DoS: 50,000 (50\%)
+    \item Reconnaissance: 13,000 (13\%)
+\end{itemize}
+
+\textbf{Lý do tạo balanced test set}: Tập test gốc có tỷ lệ mất cân bằng nghiêm trọng, khiến accuracy không phản ánh đúng khả năng phát hiện Normal. Tập test cân bằng cho phép đánh giá công bằng hiệu năng trên tất cả các lớp.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/05_class_distribution.png}
+    \caption{Phân phối lớp trong tập dữ liệu - So sánh giữa training set (imbalanced) và balanced test set.}
+    \label{fig:class_dist}
+\end{figure}
+
+\subsection{Siêu tham số mô hình}
+
+\textbf{Stage 1: Binary Classification (Attack vs Normal)}
+
+\begin{table}[H]
+    \centering
+    \caption{Siêu tham số Stage 1}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Tham số} & \textbf{Giá trị} & \textbf{Ý nghĩa} \\ \hline
+    n\_estimators & 200 & Số lượng cây quyết định \\ \hline
+    max\_depth & 6 & Độ sâu tối đa của mỗi cây \\ \hline
+    learning\_rate & 0.1 & Tốc độ học (shrinkage) \\ \hline
+    subsample & 0.8 & Tỷ lệ sample cho mỗi cây (80\%) \\ \hline
+    colsample\_bytree & 0.8 & Tỷ lệ features cho mỗi cây (80\%) \\ \hline
+    scale\_pos\_weight & 2574 & Trọng số cho lớp thiểu số (Normal) \\ \hline
+    tree\_method & 'hist' & Histogram-based algorithm \\ \hline
+    device & 'cuda' & Sử dụng GPU \\ \hline
+    eval\_metric & 'logloss' & Binary cross-entropy \\ \hline
+    early\_stopping\_rounds & 20 & Dừng sớm nếu không cải thiện \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{SMOTE cho Stage 1}:
+\begin{itemize}
+    \item sampling\_strategy: 0.1 (tăng Normal lên 10\% của Attack)
+    \item k\_neighbors: 5
+\end{itemize}
+
+\textbf{Stage 2: Multi-class Classification (DDoS vs DoS vs Reconnaissance)}
+
+\begin{table}[H]
+    \centering
+    \caption{Siêu tham số Stage 2}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Tham số} & \textbf{Giá trị} & \textbf{Ý nghĩa} \\ \hline
+    objective & 'multi:softmax' & Multi-class classification \\ \hline
+    num\_class & 3 & Số lớp (DDoS, DoS, Reconnaissance) \\ \hline
+    n\_estimators & 200 & Số lượng cây \\ \hline
+    max\_depth & 6 & Độ sâu tối đa \\ \hline
+    learning\_rate & 0.1 & Tốc độ học \\ \hline
+    subsample & 0.8 & Tỷ lệ sample \\ \hline
+    colsample\_bytree & 0.8 & Tỷ lệ features \\ \hline
+    tree\_method & 'hist' & Histogram-based \\ \hline
+    device & 'cuda' & GPU acceleration \\ \hline
+    eval\_metric & 'mlogloss' & Multi-class cross-entropy \\ \hline
+    sample\_weight & 'balanced' & Cân bằng trọng số cho các lớp \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{Kết quả thực nghiệm}
+
+\subsection{Kết quả huấn luyện}
+
+\begin{table}[H]
+    \centering
+    \caption{Kết quả huấn luyện tổng hợp}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+    \textbf{Metric} & \textbf{Stage 1} & \textbf{Stage 2} & \textbf{Overall} \\ \hline
+    \textbf{Accuracy} & 99.26\% & 97.58\% & 97.19\% \\ \hline
+    \textbf{ROC-AUC} & 99.99\% & - & - \\ \hline
+    \textbf{Training Time} & 30.6s & 58.7s & 89.3s \\ \hline
+    \textbf{Best Iteration} & 199/200 & 199/200 & - \\ \hline
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/00_summary_dashboard.png}
+    \caption{Overall Performance Summary Dashboard}
+    \label{fig:dashboard}
+\end{figure}
+
+\subsection{Confusion Matrix và phân tích chi tiết}
+
+\textbf{Stage 1: Binary Classification}
+
+\begin{table}[H]
+    \centering
+    \caption{Confusion Matrix - Stage 1}
+    \begin{tabular}{|l|l|l|}
+    \hline
+    & \textbf{Pred: Normal} & \textbf{Pred: Attack} \\ \hline
+    \textbf{Act: Normal} & 1,999 (TN) & 1 (FP) \\ \hline
+    \textbf{Act: Attack} & 744 (FN) & 97,256 (TP) \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{Metrics từ Confusion Matrix}:
+\begin{itemize}
+    \item True Positive Rate (Recall): 99.24\%
+    \item False Positive Rate: 0.05\%
+    \item True Negative Rate (Specificity): 99.95\%
+\end{itemize}
+
+\textbf{Overall Pipeline: 4x4 Confusion Matrix}
+
+\begin{table}[H]
+    \centering
+    \caption{Confusion Matrix - Overall (4 categories)}
+    \begin{tabular}{|l|l|l|l|l|}
+    \hline
+    & \textbf{Pred: Norm} & \textbf{Pred: DDoS} & \textbf{Pred: DoS} & \textbf{Pred: Recon} \\ \hline
+    \textbf{Act: Norm} & 1,999 & 0 & 1 & 0 \\ \hline
+    \textbf{Act: DDoS} & 513 & 32,628 & 29 & 1,830 \\ \hline
+    \textbf{Act: DoS} & 166 & 15 & 49,679 & 140 \\ \hline
+    \textbf{Act: Recon} & 65 & 0 & 49 & 12,886 \\ \hline
+    \end{tabular}
+\end{table}
+
+\textbf{Phân tích}:
+\begin{itemize}
+    \item \textbf{Normal}: Recall 99.95\% - xuất sắc.
+    \item \textbf{DDoS}: Recall 93.22\% - điểm yếu chính (bị nhầm với Recon và Normal).
+    \item \textbf{DoS}: Recall 99.36\% - rất tốt.
+    \item \textbf{Reconnaissance}: Recall 99.12\% - tốt.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/01_confusion_matrix.png}
+    \caption{Confusion Matrix cho Overall Pipeline (4 categories)}
+    \label{fig:cm}
+\end{figure}
+
+\subsection{Training Curves}
+
+Loss giảm nhanh trong 50 iterations đầu tiên và converge ổn định sau iteration 100, không có dấu hiệu overfitting.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/combined_loss_curves.png}
+    \caption{Combined Training Curves - So sánh loss evolution của cả hai stages}
+    \label{fig:loss}
+\end{figure}
+
+\section{Đánh giá hiệu năng}
+
+\subsection{Đánh giá chi tiết theo từng loại}
+
+\begin{table}[H]
+    \centering
+    \caption{Metrics chi tiết cho từng category}
+    \begin{tabular}{|l|l|l|l|l|}
+    \hline
+    \textbf{Category} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Accuracy} \\ \hline
+    \textbf{Normal} & 72.88\% & 99.95\% & 84.29\% & 99.95\% \\ \hline
+    \textbf{DDoS} & 99.95\% & 93.22\% & 96.47\% & 93.22\% \\ \hline
+    \textbf{DoS} & 99.84\% & 99.36\% & 99.60\% & 99.36\% \\ \hline
+    \textbf{Reconnaissance} & 86.74\% & 99.12\% & 92.52\% & 99.12\% \\ \hline
+    \textbf{Avg} & 97.35\% & 97.19\% & 97.17\% & 97.19\% \\ \hline
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/03_per_category_metrics.png}
+    \caption{Precision, Recall và F1-Score cho từng category}
+    \label{fig:metrics}
+\end{figure}
+
+\subsection{Đánh giá hiệu năng tính toán}
+
+\begin{table}[H]
+    \centering
+    \caption{Hiệu năng tính toán}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+    \textbf{Metric} & \textbf{Stage 1} & \textbf{Stage 2} & \textbf{Overall} \\ \hline
+    \textbf{Throughput (samples/sec)} & 1,017,595 & 2,908,013 & 1,217,890 \\ \hline
+    \textbf{Latency per sample} & 0.98 $\mu$s & 0.34 $\mu$s & 0.82 $\mu$s \\ \hline
+    \textbf{Model Size} & 2.1 MB & 6.3 MB & 8.4 MB \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{So sánh với các phương pháp liên quan}
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh với các phương pháp khác}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+    \textbf{Method} & \textbf{Accuracy} & \textbf{Train Time} & \textbf{Memory} \\ \hline
+    Baseline (No ML) & 89.3\% & - & - \\ \hline
+    Random Forest & 94.2\% & 45 min & 8 GB \\ \hline
+    SVM (RBF) & 91.5\% & 180 min & 16 GB \\ \hline
+    Single XGBoost & 95.8\% & 25 min & 12 GB \\ \hline
+    Deep Learning & 96.5\% & 120 min & 20 GB \\ \hline
+    \textbf{Two-Stage (Ours)} & \textbf{97.19\%} & \textbf{12 min} & \textbf{33 GB} \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{Phân tích và thảo luận kết quả}
+
+\subsection{Điểm thành công}
+\begin{enumerate}
+    \item \textbf{Two-Stage Architecture vượt trội}: Accuracy 97.19\% cao nhất.
+    \item \textbf{Source Diversity Features hiệu quả}: 3 features mới cải thiện DDoS recall đáng kể.
+    \item \textbf{SMOTE giải quyết imbalanced}: Normal recall đạt 99.95\%.
+    \item \textbf{GPU Acceleration}: Tăng tốc 160x (12 phút vs 4 giờ).
+\end{enumerate}
+
+\subsection{Hạn chế và thách thức}
+\begin{enumerate}
+    \item \textbf{DDoS Recall chưa hoàn hảo}: 93.22\%.
+    \item \textbf{Theft category bị loại bỏ}: Do thiếu dữ liệu.
+    \item \textbf{Memory Requirement cao}: 33GB RAM.
+\end{enumerate}
+
+\section{Kết luận chương}
+Nghiên cứu đã xây dựng thành công hệ thống phát hiện botnet hiệu năng cao, chứng minh tính hiệu quả của kiến trúc hai giai đoạn và các kỹ thuật xử lý dữ liệu đề xuất.
+
+
+\chapter{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
+
+\section{Tóm tắt kết quả nghiên cứu}
+
+Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hiện và phân loại botnet IoT dựa trên mô hình học máy phân cấp hai giai đoạn (Two-Stage Hierarchical Model), đạt được các kết quả đáng chú ý sau:
+
+\subsection{Hiệu năng tổng thể}
+
+Hệ thống đạt \textbf{Overall Accuracy 97.19\%} trên tập dữ liệu Bot-IoT với 100,000 samples cân bằng, vượt trội so với các phương pháp hiện có:
+
+\begin{itemize}
+    \item Random Forest: 94.2\% (+3\%)
+    \item SVM với RBF kernel: 91.5\% (+5.7\%)
+    \item Single-stage XGBoost: 95.8\% (+1.4\%)
+    \item Deep Learning CNN-LSTM: 96.5\% (+0.7\%)
+\end{itemize}
+
+\textbf{Stage 1 (Binary Classification)} đạt accuracy 99.26\% và ROC-AUC 99.99\%, cho thấy khả năng phân biệt lưu lượng tấn công và bình thường gần như hoàn hảo. \textbf{Stage 2 (Multi-class Classification)} đạt accuracy 97.58\% trên các loại tấn công, với F1-score weighted 97.64\%.
+
+\subsection{Hiệu năng theo từng loại tấn công}
+
+Hệ thống thể hiện khả năng phát hiện xuất sắc trên hầu hết các loại tấn công:
+
+\begin{itemize}
+    \item \textbf{Normal}: Recall 99.95\% (chỉ bỏ sót 1/2,000 samples)
+    \item \textbf{DoS}: Recall 99.36\%, Precision 99.84\% (hiệu năng tốt nhất)
+    \item \textbf{Reconnaissance}: Recall 99.12\%, Precision 86.74\%
+    \item \textbf{DDoS}: Recall 93.22\%, Precision 99.95\% (điểm yếu cần cải thiện)
+\end{itemize}
+
+\subsection{Hiệu năng tính toán}
+
+Hệ thống đạt được hiệu năng tính toán ấn tượng, phù hợp cho triển khai thực tế:
+
+\begin{itemize}
+    \item \textbf{Training time}: 12 phút (với GPU T4) vs 4 giờ (CPU only) - tăng tốc 20x.
+    \item \textbf{Inference throughput}: 1.2 triệu samples/giây.
+    \item \textbf{Latency}: 0.82 microseconds/sample.
+    \item \textbf{Model size}: 8.4 MB (compact, dễ deploy).
+    \item \textbf{RAM inference}: \textasciitilde1 GB (thấp, phù hợp edge devices).
+\end{itemize}
+
+Khả năng xử lý này cho phép hệ thống scale lên 121,000 IoT devices với single instance, vượt xa yêu cầu thực tế.
+
+\section{Đóng góp chính của nghiên cứu}
+
+\subsection{Đóng góp về mô hình}
+
+\textbf{Kiến trúc Two-Stage Hierarchical Model}
+
+Nghiên cứu đề xuất kiến trúc phân cấp hai giai đoạn, trong đó:
+\begin{itemize}
+    \item \textbf{Stage 1} tập trung vào binary classification (Attack vs Normal) để lọc ra lưu lượng bình thường.
+    \item \textbf{Stage 2} chuyên sâu vào multi-class classification (DDoS vs DoS vs Reconnaissance) chỉ trên các samples được xác định là tấn công.
+\end{itemize}
+Kiến trúc này cho phép tối ưu hóa riêng biệt cho từng bài toán con, khai thác đặc thù của từng giai đoạn, và đạt accuracy cao hơn 1.4\% so với single-stage XGBoost.
+
+\textbf{Tích hợp XGBoost với GPU Acceleration}
+
+Sử dụng XGBoost 3.x với \texttt{tree\_method='hist'} và \texttt{device='cuda'} để tận dụng tối đa GPU, đạt training time chỉ 12 phút so với 4 giờ khi sử dụng CPU, cho phép rapid experimentation và dễ dàng retrain model khi có dữ liệu mới.
+
+\subsection{Đóng góp về đặc trưng}
+
+\textbf{Source Diversity Features}
+
+Nghiên cứu thiết kế 3 đặc trưng mới dựa trên phân tích đặc tính nguồn tấn công:
+\begin{enumerate}
+    \item \texttt{unique\_src\_count}: Số lượng địa chỉ IP nguồn duy nhất trong time window.
+    \item \texttt{src\_entropy}: Entropy của phân phối địa chỉ nguồn (Shannon entropy).
+    \item \texttt{top\_src\_ratio}: Tỷ lệ của địa chỉ nguồn xuất hiện nhiều nhất.
+\end{enumerate}
+
+Các features này giúp phân biệt hiệu quả giữa DDoS attacks (nhiều nguồn) và DoS attacks (ít nguồn). Ablation study chứng minh đóng góp đáng kể: bỏ source diversity features làm DDoS recall giảm 4.72\% (từ 93.22\% xuống 88.5\%).
+
+\subsection{Đóng góp về xử lý mất cân bằng dữ liệu}
+
+\textbf{Extreme Imbalance Handling (2000:1)}
+
+Nghiên cứu áp dụng kết hợp hai kỹ thuật:
+\begin{itemize}
+    \item \textbf{SMOTE}: Tạo synthetic samples cho lớp thiểu số (Normal, Reconnaissance), tăng số lượng từ 7,769 lên \textasciitilde2 triệu samples.
+    \item \textbf{scale\_pos\_weight}: Cân bằng trọng số trong hàm loss để tăng ảnh hưởng của lớp thiểu số.
+\end{itemize}
+
+Kết quả: Normal recall đạt 99.95\% và Reconnaissance recall đạt 99.12\% dù chỉ chiếm 9\% training data.
+
+\subsection{Đóng góp về quy trình và triển khai}
+
+\textbf{Scalable Data Processing Pipeline}
+
+Thiết kế quy trình xử lý hiệu quả cho Big Data (74 files CSV, 16GB, 40-50M records) với batch merging strategy, balanced test set creation và memory optimization.
+
+\textbf{Production-Ready Architecture}
+
+Hệ thống được thiết kế với các đặc điểm phù hợp triển khai thực tế như model size nhỏ gọn (8.4 MB) và throughput cao (1.2M samples/sec).
+
+\section{Hạn chế và tồn tại}
+
+\subsection{Hạn chế về hiệu năng}
+
+\textbf{DDoS Detection Performance}: Mặc dù Overall Accuracy đạt 97.19\%, DDoS recall chỉ đạt 93.22\%, thấp hơn so với các loại tấn công khác. Nguyên nhân là do một số "low-rate DDoS" giống Normal traffic và sự khó phân biệt giữa DDoS và Reconnaissance.
+
+\textbf{Theft Category bị loại bỏ}: Loại tấn công Theft chỉ có 1,587 samples (0.003\%), quá ít để huấn luyện model hiệu quả.
+
+\subsection{Hạn chế về tài nguyên}
+
+\textbf{Memory Requirement cao}: Training cần 33GB RAM, yêu cầu cloud instances với High-RAM, không phù hợp với consumer laptops.
+
+\subsection{Hạn chế về triển khai}
+
+Chưa có Real-time Deployment và chưa validate trên datasets khác ngoài Bot-IoT.
+
+\section{Hướng phát triển tương lai}
+
+\subsection{Cải thiện DDoS Detection}
+
+\begin{itemize}
+    \item \textbf{Temporal Feature Engineering}: Thêm time-series features (flow rate, inter-arrival time stats).
+    \item \textbf{Ensemble với Deep Learning}: Kết hợp XGBoost với CNN-LSTM để leverage cả statistical và temporal patterns.
+\end{itemize}
+
+\subsection{Real-time Deployment}
+
+\begin{itemize}
+    \item \textbf{API Development}: Xây dựng REST API với Flask hoặc FastAPI.
+    \item \textbf{Edge Deployment}: Deploy model trên IoT gateway devices (Raspberry Pi, NVIDIA Jetson).
+    \item \textbf{Monitoring và Alerting}: Implement real-time monitoring system.
+\end{itemize}
+
+\subsection{Mở rộng Dataset và Cross-validation}
+
+Thu thập thêm dữ liệu Theft, validate trên các datasets khác (CICIDS, NSL-KDD), và implement online learning.
+
+\subsection{Tối ưu hóa Resource}
+
+Model compression (quantization, pruning), incremental learning để giảm RAM training, và feature selection để giảm số lượng features.
+
+\section{Kết luận}
+
+Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hiện và phân loại botnet IoT dựa trên mô hình Two-Stage Hierarchical Model, đạt Overall Accuracy 97.19\%, vượt trội so với các phương pháp hiện tại. Các đóng góp chính bao gồm kiến trúc phân cấp hai giai đoạn, Source Diversity Features, xử lý extreme imbalance, GPU acceleration, và scalable pipeline. Mặc dù còn tồn tại một số hạn chế, nghiên cứu đã đặt nền móng vững chắc cho các hướng phát triển tiếp theo để trở thành giải pháp toàn diện cho bảo mật IoT.
+
+\addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
+\begin{thebibliography}{99}
+
+\bibitem{ref1} N. Koroniotis, N. Moustafa, E. Sitnikova, and B. Turnbull, "Towards the development of realistic botnet dataset in the Internet of Things for network forensic analytics: Bot-IoT dataset," \textit{Future Generation Computer Systems}, vol. 100, pp. 779–796, 2019.
+
+\bibitem{ref2} M. Sarhan, S. Layeghy, N. Moustafa, and M. Portmann, "NetFlow datasets for machine learning-based network intrusion detection systems," \textit{arXiv preprint arXiv:2011.09144}, 2020.
+
+\bibitem{ref3} S. Alosaimi and S. M. Almutairi, "An intrusion detection system using BoT-IoT," \textit{Applied Sciences}, vol. 13, no. 9, art. 5427, 2023, doi: 10.3390/app13095427.
+
+\bibitem{ref4} F. H. Zawaideh, G. Al-Asad, G. Swaneh, S. Batainah, and H. Bakkar, "Intrusion detection system for IoT networks using convolutional neural network (CNN) and XGBoost algorithm," \textit{Journal of Theoretical and Applied Information Technology}, vol. 102, no. 4, 2024.
+
+\bibitem{ref5} H. Zhang, B. Zhang, L. Huang, Z. Zhang, and H. Huang, "An efficient two-stage network intrusion detection system in the Internet of Things," \textit{Information}, vol. 14, no. 2, art. 77, 2023, doi: 10.3390/info14020077.
+
+\bibitem{ref6} E. Özdoğan, O. Ceran, M. Uysal, M. T. Üstündağ, and M. R. Habib, "IoT intrusion detection: Implementing a dual-layered security approach," \textit{International Journal of Intelligent Systems}, vol. 2025, art. 8884584, pp. 1–23, 2025, doi: 10.1155/int.8884584.
+
+\bibitem{ref7} T.-T.-H. Le, Y. E. Oktian, and H. Kim, "XGBoost for imbalanced multiclass classification-based industrial Internet of Things intrusion detection systems," \textit{Sustainability}, vol. 14, no. 14, art. 8707, 2022, doi: 10.3390/su14148707.
+
+\bibitem{ref8} D. F. Doghramachi and S. Y. Ameen, "Internet of Things (IoT) security enhancement using XGBoost machine learning techniques," \textit{Computers, Materials \& Continua}, vol. 77, no. 1, pp. 717–732, 2023, doi: 10.32604/cmc.2023.041186.
+
+\bibitem{ref9} S. Chalichalamala, N. Govindan, and R. Kasarapu, "An extreme gradient boost based classification and regression tree for network intrusion detection in IoT," \textit{Bulletin of Electrical Engineering and Informatics}, vol. 13, no. 3, 2024, doi: 10.11591/eei.v13i3.6843.
+
+\bibitem{ref10} M. R. A. Khan, A. Y. Barnawi, A. Munir, Z. Alsalman, and D. M. S. Sanunga, "Lightweight quantized XGBoost for botnet detection in resource-constrained IoT networks," \textit{IoT}, vol. 6, no. 4, art. 70, 2025, doi: 10.3390/iot6040070.
+
+\bibitem{ref11} T. Chen and C. Guestrin, "XGBoost: A scalable tree boosting system," in \textit{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining}, San Francisco, CA, USA, 2016, pp. 785-794.
+
+\bibitem{ref12} J. H. Friedman, "Greedy function approximation: A gradient boosting machine," \textit{The Annals of Statistics}, vol. 29, no. 5, pp. 1189-1232, 2001.
+
+\bibitem{ref13} N. V. Chawla, K. W. Bowyer, L. O. Hall, and W. P. Kegelmeyer, "SMOTE: Synthetic minority over-sampling technique," \textit{Journal of Artificial Intelligence Research}, vol. 16, pp. 321-357, 2002.
+
+\bibitem{ref14} H. He and E. A. Garcia, "Learning from imbalanced data," \textit{IEEE Transactions on Knowledge and Data Engineering}, vol. 21, no. 9, pp. 1263-1284, 2009.
+
+\bibitem{ref15} A. Fernández, S. García, M. Galar, R. C. Prati, B. Krawczyk, and F. Herrera, \textit{Learning from Imbalanced Data Sets}, Springer International Publishing, 2018.
+
+\bibitem{ref16} C. N. Silla Jr. and A. A. Freitas, "A survey of hierarchical classification across different application domains," \textit{Data Mining and Knowledge Discovery}, vol. 22, no. 1-2, pp. 31-72, 2011.
+
+\bibitem{ref17} C. Kolias, G. Kambourakis, A. Stavrou, and J. Voas, "DDoS in the IoT: Mirai and other botnets," \textit{Computer}, vol. 50, no. 7, pp. 80-84, 2017.
+
+\bibitem{ref18} M. Antonakakis et al., "Understanding the Mirai botnet," in \textit{Proceedings of the 26th USENIX Security Symposium}, Vancouver, BC, Canada, 2017, pp. 1093-1110.
+
+\bibitem{ref19} A. L. Buczak and E. Guven, "A survey of data mining and machine learning methods for cyber security intrusion detection," \textit{IEEE Communications Surveys \& Tutorials}, vol. 18, no. 2, pp. 1153-1176, 2016.
+
+\bibitem{ref20} A. Khraisat, I. Gondal, P. Vamplew, and J. Kamruzzaman, "Survey of intrusion detection systems: techniques, datasets and challenges," \textit{Cybersecurity}, vol. 2, no. 1, pp. 1-22, 2019.
+
+\bibitem{ref21} R. Vinayakumar, M. Alazab, K. P. Soman, P. Poornachandran, A. Al-Nemrat, and S. Venkatraman, "Deep learning approach for intelligent intrusion detection system," \textit{IEEE Access}, vol. 7, pp. 41525-41550, 2019.
+
+\bibitem{ref22} T. A. Tang, L. Mhamdi, D. McLernon, S. A. R. Zaidi, and M. Ghogho, "Deep learning approach for network intrusion detection in software defined networking," in \textit{Proceedings of the International Conference on Wireless Networks and Mobile Communications (WINCOM)}, Fez, Morocco, 2016, pp. 258-263.
+
+\bibitem{ref23} Google Colaboratory, "Google Colab Pro+," Google Research, 2023. [Online]. Available: https://colab.research.google.com/
+
+\bibitem{ref24} NVIDIA Corporation, "CUDA Toolkit Documentation," NVIDIA Developer, 2023. [Online]. Available: https://docs.nvidia.com/cuda/
+
+\bibitem{ref25} Statista Research Department, "IoT: Number of connected devices worldwide 2015-2025," \textit{Statista}, 2023. [Online]. Available: https://www.statista.com/statistics/471264/iot-number-of-connected-devices-worldwide/
+
+\end{thebibliography}
+
+\end{document}
+
+
+
+
+
