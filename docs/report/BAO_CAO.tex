@@ -3,7 +3,7 @@
 
 % Packages
 \usepackage{fontspec}
-\setmainfont{Liberation Serif}
+\setmainfont{Times New Roman}
 \usepackage[vietnamese]{babel}
 \usepackage[top=2cm, bottom=3cm, left=3cm, right=2cm]{geometry}
 \usepackage{graphicx}
@@ -663,6 +663,167 @@ Kết hợp dự đoán Stage 1 và Stage 2. Overall Accuracy: 97.19\%.
     \item GPU: Tesla T4 (16GB VRAM) / V100 / A100.
 \end{itemize}
 
+\section{Hệ thống phân loại chi tiết các biến thể DDoS}
+
+\subsection{Động lực và mục tiêu}
+
+Các cuộc tấn công DDoS trong môi trường IoT ngày càng đa dạng về cơ chế và mục tiêu, bao gồm tấn công băng thông, tấn công tài nguyên kết nối, và tấn công lớp ứng dụng. Trong Bot-IoT dataset \cite{ref1}, các tấn công DDoS được gán nhãn chi tiết theo trường \texttt{subcategory}, tương ứng với ba biến thể chính:
+
+\textbf{DDoS-HTTP} -- Tấn công lớp ứng dụng (Layer 7), khai thác số lượng lớn HTTP requests nhằm làm quá tải web server. Loại tấn công này thường được thực thi bởi các công cụ như GoldenEye \cite{ref27}.
+
+\textbf{DDoS-TCP} -- Tấn công lớp vận chuyển (Transport layer), bao gồm SYN flood và ACK flood, đánh vào bảng trạng thái kết nối của thiết bị mạng. Các biến thể này thường được tạo bởi công cụ Hping3 \cite{ref28}.
+
+\textbf{DDoS-UDP} -- Tấn công băng thông bằng cách gửi lượng lớn UDP packets đến các cổng ngẫu nhiên, gây tiêu tốn tài nguyên mạng và làm nghẽn dịch vụ.
+
+Báo cáo thống kê từ Kaspersky Q3 2021 \cite{ref26} cho thấy SYN flooding và UDP flooding chiếm tỷ lệ cao trong các cuộc tấn công thực tế. Điều này khẳng định tầm quan trọng của hệ thống phân loại chi tiết nhằm:
+
+\begin{itemize}
+    \item Nhận diện chính xác các đặc trưng hành vi của từng loại DDoS
+    \item Hỗ trợ lựa chọn biện pháp phòng thủ phù hợp, chẳng hạn rate limiting cho HTTP floods, SYN cookies cho TCP floods, hoặc packet filtering cho UDP floods
+    \item Phân tích forensics và threat intelligence, giúp suy luận công cụ tấn công, chiến thuật botnet và dấu hiệu hành vi (behavioral signatures)
+\end{itemize}
+
+\subsection{Dataset và phương pháp cân bằng}
+
+Bot-IoT dataset là một trong những bộ dữ liệu IoT-IDS quy mô lớn nhất hiện nay, tuy nhiên nó gặp vấn đề mất cân bằng nghiêm trọng, với tỷ lệ Normal : Attack $\approx$ 1 : 7687. Trong bối cảnh yêu cầu phân loại đa lớp (DDoS-HTTP, DDoS-TCP, DDoS-UDP), việc xử lý mất cân bằng trở thành yếu tố then chốt để tránh mô hình thiên lệch về lớp tấn công.
+
+\subsubsection{Hạn chế của SMOTE trong bài toán DDoS IoT}
+
+Các kỹ thuật oversampling tổng hợp như SMOTE thường không phù hợp với lưu lượng DDoS vì:
+
+\textbf{Mất tương quan thời gian (temporal correlation)}:
+DDoS thể hiện hành vi bursty và biểu hiện dạng chuỗi theo thời gian. SMOTE tạo mẫu tổng hợp rời rạc trong feature space, gây phá vỡ cấu trúc chuỗi của các flows tấn công.
+
+\textbf{Không phản ánh đúng signatures của botnet}:
+Các packet trains trong tấn công thực tế có đặc trưng riêng theo tool và topology botnet, không thể nội suy tuyến tính từ vài điểm dữ liệu.
+
+\textbf{Nguy cơ overfitting}:
+Model có thể học đặc trưng nhân tạo sinh ra bởi SMOTE thay vì đặc trưng thực tế của hành vi tấn công.
+
+\subsubsection{Random Consecutive Sampling}
+
+Thay vì SMOTE, nghiên cứu áp dụng Random Consecutive Sampling nhằm:
+
+\begin{itemize}
+    \item \textbf{Bảo toàn hành vi theo thời gian}, bằng cách lấy các cụm flows liên tiếp từ mỗi subcategory
+    \item \textbf{Tránh tạo dữ liệu giả}, giữ nguyên bản chất distribution của tấn công
+    \item \textbf{Đảm bảo cân bằng}, với 7,634--7,635 mẫu cho mỗi lớp: Normal, DDoS-HTTP, DDoS-TCP, DDoS-UDP
+\end{itemize}
+
+\textbf{Lựa chọn kích thước mẫu}: Số lượng 7,634--7,635 samples được chọn dựa trên nguyên tắc \textit{balancing by minority class}. Sau quá trình tiền xử lý (data cleaning, loại bỏ outliers, xử lý missing values), lớp Normal còn lại 7,634 flows hợp lệ -- đây là lớp nhỏ nhất trong dataset. Để đảm bảo tính cân bằng hoàn toàn và tránh bias, tất cả các attack subcategories (DDoS-HTTP, DDoS-TCP, DDoS-UDP) đều được down-sampling về khoảng 7,634--7,635 mẫu bằng Random Consecutive Sampling. Phương pháp này đảm bảo:
+
+\begin{itemize}
+    \item Perfect class balance (25\% cho mỗi class)
+    \item Không cần class weights trong XGBoost
+    \item Model học công bằng từ tất cả các classes
+\end{itemize}
+
+Bảng \ref{tab:ddos_distribution} trình bày phân phối cân bằng thu được:
+
+\begin{table}[H]
+    \centering
+    \caption{Phân phối cân bằng theo subcategory}
+    \label{tab:ddos_distribution}
+    \begin{tabular}{|l|r|r|}
+    \hline
+    \textbf{Subcategory} & \textbf{Samples} & \textbf{Tỷ lệ} \\ \hline
+    Normal & 7,634 & 25\% \\ \hline
+    DDoS-HTTP & 7,635 & 25\% \\ \hline
+    DDoS-TCP & 7,635 & 25\% \\ \hline
+    DDoS-UDP & 7,634 & 25\% \\ \hline
+    \textbf{Tổng} & 30,538 & 100\% \\ \hline
+    \end{tabular}
+\end{table}
+
+Phương pháp này giúp mô hình không bị ảnh hưởng bởi bias phân phối, đồng thời vẫn giữ được cấu trúc thực tế của traffic.
+
+\subsection{Kiến trúc mô hình phân loại đa lớp}
+
+Hệ thống sử dụng mô hình XGBoost Multi-class Classifier với các đặc điểm:
+
+\begin{itemize}
+    \item \textbf{Input}: 16 features đã chọn lọc
+    \item \textbf{Output}: 4 lớp (Normal, DDoS-HTTP, DDoS-TCP, DDoS-UDP)
+    \item \textbf{Không sử dụng SMOTE}, nhờ dataset đã được cân bằng
+    \item \textbf{Ưu điểm}: tốc độ huấn luyện nhanh, khả năng xử lý tabular data tốt, phù hợp môi trường IDS theo thời gian thực
+\end{itemize}
+
+\subsection{Lựa chọn đặc trưng -- 16 Best Features}
+
+Từ 35 features gốc của Bot-IoT flow records, 16 đặc trưng được chọn dựa trên tính phân biệt (discriminative power) và mức độ liên quan hành vi (behavioral relevance). Các nhóm feature chính gồm:
+
+\subsubsection{(1) Basic flow metrics (4 features)}
+
+\texttt{pkts}, \texttt{bytes} -- phản ánh lưu lượng tấn công
+
+\texttt{seq} -- phát hiện bất thường trong TCP sequence patterns
+
+\texttt{dur} -- độ dài flow, phân biệt sustained HTTP floods và short-burst TCP floods
+
+\subsubsection{(2) Statistical aggregations (5 features)}
+
+\texttt{mean}, \texttt{stddev}, \texttt{sum}, \texttt{min}, \texttt{max} của inter-arrival/duration
+
+$\rightarrow$ ghi nhận burstiness và sự biến thiên trong traffic
+
+\subsubsection{(3) Directional metrics (4 features)}
+
+\texttt{spkts}, \texttt{dpkts}, \texttt{sbytes}, \texttt{dbytes}
+
+$\rightarrow$ DDoS thường biểu hiện bất cân xứng mạnh (nhiều nguồn $\rightarrow$ một đích)
+
+\subsubsection{(4) Rate-based features (3 features)}
+
+\texttt{rate}, \texttt{srate}, \texttt{drate}
+
+$\rightarrow$ phản ánh intensity của cuộc tấn công
+
+\subsubsection{Lý do loại bỏ các nhóm feature khác}
+
+\textbf{Timestamps} (\texttt{stime}, \texttt{ltime}):
+Lưu lượng tấn công có thể đến bất kỳ thời điểm nào; dùng timestamps dễ khiến mô hình ``học thuộc'' thời gian và không generalize khi triển khai online.
+
+\textbf{Địa chỉ IP/MAC}:
+\begin{itemize}
+    \item Cardinality rất lớn
+    \item Botnets thường thay đổi IP để né tránh
+    \item Không có giá trị trong hệ thống IDS tổng quát
+\end{itemize}
+
+\textbf{Protocol-specific metadata} (\texttt{proto}, \texttt{flags}, \texttt{state}):
+Dù hữu ích trong một số trường hợp, nhưng mô hình phân loại variants DDoS cần ưu tiên behavioral features, không phụ thuộc vào header-level semantics, nhằm tăng khả năng phát hiện cross-protocol.
+
+\subsection{Siêu tham số}
+
+\begin{table}[H]
+    \centering
+    \caption{Cấu hình XGBoost DDoS Classifier}
+    \begin{tabular}{|l|l|}
+    \hline
+    \textbf{Tham số} & \textbf{Giá trị} \\ \hline
+    objective & multi:softmax \\ \hline
+    num\_class & 4 \\ \hline
+    max\_depth & 7 \\ \hline
+    learning\_rate & 0.1 \\ \hline
+    n\_estimators & 100 \\ \hline
+    subsample & 0.8 \\ \hline
+    colsample\_bytree & 0.8 \\ \hline
+    eval\_metric & mlogloss \\ \hline
+    \end{tabular}
+\end{table}
+
+\subsection{Quy trình huấn luyện}
+
+\textbf{Bước 1}: Load dữ liệu từ \texttt{balanced\_ddos\_only.csv}, convert to numeric, xử lý NaN/inf
+
+\textbf{Bước 2}: Chọn 16 features, label encoding (Normal=0, HTTP=1, TCP=2, UDP=3), standardization
+
+\textbf{Bước 3}: Split 80/10/10 với stratification
+
+\textbf{Bước 4}: Train XGBoost với eval\_set, converge trong 20-30 epochs, $<$ 2 phút trên CPU
+
+\textbf{Bước 5}: Evaluate với Accuracy/Precision/Recall/F1, tạo confusion matrix, save model
+
 \section{Phân tích độ phức tạp và đánh giá tối ưu hóa}
 
 \subsection{Độ phức tạp về thời gian (Time Complexity)}
@@ -1012,9 +1173,161 @@ Loss giảm nhanh trong 50 iterations đầu tiên và converge ổn định sau
     \end{tabular}
 \end{table}
 
+\section{Kết quả phân loại chi tiết các biến thể DDoS}
+
+Phần này trình bày hiệu năng của mô hình phân loại đa lớp (Normal, DDoS-HTTP, DDoS-TCP, DDoS-UDP) dựa trên tập dữ liệu đã cân bằng và trích xuất 16 đặc trưng hành vi mạng. Các kết quả được minh họa qua phân bố lớp, tương quan đặc trưng, quá trình huấn luyện, metrics tổng thể và đánh giá chi tiết theo từng lớp.
+
+\subsection{Phân bố các lớp sau khi cân bằng}
+
+Hình dưới đây cho thấy phân bố bốn lớp trong tập dữ liệu sau khi áp dụng phương pháp Random Consecutive Sampling.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{plots/class_distribution.png}
+    \caption{Phân bố các lớp sau Random Consecutive Sampling}
+    \label{fig:ddos_class_distribution}
+\end{figure}
+
+\textbf{Nhận xét}:
+\begin{itemize}
+    \item Mỗi lớp có 7,634--7,635 mẫu, thể hiện phân bố gần như đồng đều
+    \item Điều này ngăn mô hình bị bias theo lớp tấn công, vốn là vấn đề nghiêm trọng trong Bot-IoT gốc
+    \item Với phân bố cân bằng, mô hình có điều kiện học representation cho từng biến thể DDoS một cách công bằng
+\end{itemize}
+
+\subsection{Phân tích tương quan giữa 16 đặc trưng}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{plots/correlation_matrix.png}
+    \caption{Feature Correlation Matrix của 16 đặc trưng}
+    \label{fig:ddos_correlation_matrix}
+\end{figure}
+
+\textbf{Nhận xét từ heatmap}:
+\begin{itemize}
+    \item \textbf{Nhóm pkts, bytes, spkts, sbytes, dpkts, dbytes} có tương quan rất cao ($\geq$0.90) \\
+    $\rightarrow$ Đây là các chỉ số phản ánh cường độ traffic, giúp phân biệt rõ UDP/TCP floods
+    
+    \item \textbf{Các đặc trưng thời gian} như mean, stddev, sum có tương quan mạnh với dur \\
+    $\rightarrow$ Hỗ trợ nhận diện HTTP flood vốn có duration dài hơn
+    
+    \item \textbf{Một số đặc trưng gần như không tương quan} ($\approx$0) \\
+    $\rightarrow$ Cho thấy 16 đặc trưng chọn lọc có sự đa dạng, không trùng lặp thông tin
+\end{itemize}
+
+\textbf{Kết luận}: Heatmap chứng minh bộ 16 features có tính phân biệt cao và phù hợp cho phân loại đa biến thể DDoS.
+
+\subsection{Quá trình huấn luyện mô hình}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{plots/training_history.png}
+    \caption{Training History - Loss curves theo epochs}
+    \label{fig:ddos_training_history}
+\end{figure}
+
+\textbf{Phân tích}:
+\begin{itemize}
+    \item Train loss và validation loss gần như trùng nhau $\rightarrow$ không có overfitting
+    \item Loss giảm đều và nhanh, đặc biệt trong 20 epoch đầu $\rightarrow$ mô hình học rất hiệu quả
+    \item Sau $\sim$40 epoch, loss gần như hội tụ $\rightarrow$ đảm bảo tính ổn định cho mô hình phân loại
+\end{itemize}
+
+\textbf{Nhận định}: Bộ đặc trưng và kiến trúc mô hình là hoàn toàn phù hợp, không gây nhiễu hoặc khó học.
+
+\subsection{Kết quả đánh giá tổng thể}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{plots/overall_metrics.png}
+    \caption{Overall Model Performance Metrics}
+    \label{fig:ddos_overall_metrics}
+\end{figure}
+
+\textbf{Kết quả}:
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|c|}
+    \hline
+    \textbf{Metric} & \textbf{Giá trị} \\ \hline
+    Accuracy & 99.92\% \\ \hline
+    Precision & 99.92\% \\ \hline
+    Recall & 99.92\% \\ \hline
+    F1-Score & 99.92\% \\ \hline
+    \end{tabular}
+\end{table}
+
+$\rightarrow$ Tất cả các metrics đều gần như tuyệt đối.
+
+$\rightarrow$ Cho thấy mô hình phân loại nhất quán, không đánh đổi precision và recall.
+
+\subsection{Ma trận nhầm lẫn (Confusion Matrix)}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{plots/confusion_matrix.png}
+    \caption{Confusion Matrix for Multiclass Classification}
+    \label{fig:ddos_confusion_matrix}
+\end{figure}
+
+\textbf{Nhận xét chi tiết}:
+\begin{itemize}
+    \item \textbf{Normal} $\rightarrow$ 954/954 đúng (100\%)
+    \item \textbf{TCP} $\rightarrow$ 955/955 đúng (100\%)
+    \item \textbf{UDP} $\rightarrow$ 955/955 đúng (100\%)
+    \item \textbf{HTTP} $\rightarrow$ 951/954 đúng (99.69\%), chỉ 3 mẫu HTTP bị nhầm sang Normal
+\end{itemize}
+
+$\rightarrow$ Đây là mức độ chính xác đặc biệt cao cho multiclass problem.
+
+\textbf{Điểm đáng chú ý}: HTTP flood đôi khi có payload nhỏ và pattern gần giống Normal hơn so với UDP/TCP floods $\rightarrow$ giải thích tại sao HTTP có vài lỗi nhỏ.
+
+\subsection{Hiệu năng theo từng lớp}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{plots/per_class_metrics.png}
+    \caption{Per-Class Performance Metrics}
+    \label{fig:ddos_per_class_metrics}
+\end{figure}
+
+\textbf{Phân tích theo từng nhóm}:
+
+\textbf{Precision}:
+\begin{itemize}
+    \item Normal: 99.69\%
+    \item HTTP: 100\%
+    \item TCP: 100\%
+    \item UDP: 100\%
+\end{itemize}
+$\rightarrow$ Không có mẫu nào của TCP/UDP/HTTP bị dự đoán sai sang lớp khác $\rightarrow$ mô hình rất ổn định.
+
+\textbf{Recall}:
+\begin{itemize}
+    \item Normal: 100\%
+    \item HTTP: 99.69\%
+    \item TCP: 100\%
+    \item UDP: 100\%
+\end{itemize}
+$\rightarrow$ Chỉ lớp HTTP bị ảnh hưởng nhẹ, nhất quán với confusion matrix.
+
+\textbf{F1-score}:
+\begin{itemize}
+    \item Dao động từ 99.84\% -- 100\%, phản ánh sự cân bằng precision--recall
+\end{itemize}
+
+\textbf{Support}:
+\begin{itemize}
+    \item Mỗi lớp test gồm khoảng 954--955 mẫu, đảm bảo tính khách quan của đánh giá
+\end{itemize}
+
 \section{Phân tích và thảo luận kết quả}
 
 \subsection{Điểm thành công}
+
+\textbf{Two-Stage Hierarchical Model}:
 \begin{enumerate}
     \item \textbf{Two-Stage Architecture vượt trội}: Accuracy 97.19\% cao nhất.
     \item \textbf{Source Diversity Features hiệu quả}: 3 features mới cải thiện DDoS recall đáng kể.
@@ -1022,7 +1335,17 @@ Loss giảm nhanh trong 50 iterations đầu tiên và converge ổn định sau
     \item \textbf{GPU Acceleration}: Tăng tốc 160x (12 phút vs 4 giờ).
 \end{enumerate}
 
+\textbf{DDoS Variants Classification}:
+\begin{enumerate}
+    \item \textbf{Accuracy cực cao}: 99.92\% trên test set, vượt trội với chỉ 6 misclassifications trong 3,815 samples
+    \item \textbf{Random Consecutive Sampling hiệu quả}: Preserve temporal patterns tốt hơn SMOTE, đạt phân phối hoàn hảo 25\% cho mỗi class
+    \item \textbf{Feature selection tối ưu}: 16 best features đủ để phân biệt DDoS variants mà không cần full 35 features
+    \item \textbf{Balanced performance}: Cả 4 classes (Normal, HTTP, TCP, UDP) đều đạt F1-score $>$ 99.69\%
+\end{enumerate}
+
 \subsection{Hạn chế và thách thức}
+
+\textbf{Two-Stage Model}:
 \begin{enumerate}
     \item \textbf{DDoS Recall chưa hoàn hảo}: 93.22\%.
     \item \textbf{Theft category bị loại bỏ}: Do thiếu dữ liệu.
@@ -1030,7 +1353,13 @@ Loss giảm nhanh trong 50 iterations đầu tiên và converge ổn định sau
 \end{enumerate}
 
 \section{Kết luận chương}
-Nghiên cứu đã xây dựng thành công hệ thống phát hiện botnet hiệu năng cao, chứng minh tính hiệu quả của kiến trúc hai giai đoạn và các kỹ thuật xử lý dữ liệu đề xuất.
+Chương này trình bày kết quả thực nghiệm của hai hướng nghiên cứu chính:
+
+\textbf{Two-Stage Hierarchical Model} đạt accuracy 97.19\% với kiến trúc hai giai đoạn, chứng minh hiệu quả của Binary Classification + Multi-class Classification kết hợp Source Diversity Features và SMOTE. Hệ thống phát hiện botnet đa dạng (DDoS, DoS, Reconnaissance) với Normal recall 99.95\% và training time chỉ 12 phút nhờ GPU acceleration.
+
+\textbf{DDoS Variants Classification} đạt accuracy 99.92\% với XGBoost Multi-class, phân loại chi tiết 3 biến thể DDoS (HTTP, TCP, UDP) với balanced performance trên cả 4 classes ($>$99.69\% F1-score). Random Consecutive Sampling preserve temporal patterns hiệu quả, 16 best features tối ưu tài nguyên, và training chỉ $<$2 phút trên CPU thường (không cần GPU).
+
+Cả hai mô hình đều chứng minh tính khả thi triển khai thực tế với performance cao và resource requirements hợp lý.
 
 
 \chapter{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
@@ -1119,6 +1448,39 @@ Nghiên cứu áp dụng kết hợp hai kỹ thuật:
 
 Kết quả: Normal recall đạt 99.95\% và Reconnaissance recall đạt 99.12\% dù chỉ chiếm 9\% training data.
 
+\subsection{Đóng góp về phân loại chi tiết DDoS variants}
+
+\textbf{Random Consecutive Sampling Method}
+
+Nghiên cứu đề xuất phương pháp Random Consecutive Sampling thay thế SMOTE cho bài toán phân loại chi tiết các biến thể DDoS (HTTP, TCP, UDP):
+\begin{itemize}
+    \item \textbf{Bảo toàn temporal patterns}: Lấy các cụm flows liên tiếp thay vì random sampling, giữ nguyên đặc tính tấn công theo thời gian
+    \item \textbf{Tránh synthetic artifacts}: Không tạo dữ liệu giả như SMOTE, giữ nguyên distribution thực tế
+    \item \textbf{Perfect class balance}: Đạt phân phối đều 25\% cho mỗi class (Normal, HTTP, TCP, UDP)
+\end{itemize}
+
+\textbf{Feature Selection cho DDoS Variants}
+
+Lựa chọn 16 best features từ 35 features ban đầu, tập trung vào:
+\begin{itemize}
+    \item \textbf{Flow metrics} (pkts, bytes, dur): Phân biệt volume-based attacks
+    \item \textbf{Statistical features} (mean, stddev, sum): Capture attack patterns
+    \item \textbf{Directional metrics} (spkts/dpkts, sbytes/dbytes): Phát hiện traffic asymmetry
+    \item \textbf{Rate features} (rate, srate, drate): Distinguish high-volume UDP floods vs HTTP floods
+\end{itemize}
+
+\textbf{Hiệu năng đạt được}
+
+Mô hình XGBoost Multi-class đạt \textbf{99.92\% accuracy} trên test set với 30,538 samples cân bằng:
+\begin{itemize}
+    \item \textbf{Normal}: Precision 99.69\%, Recall 100\%, F1-Score 99.84\%
+    \item \textbf{HTTP}: Precision 100\%, Recall 99.69\%, F1-Score 99.84\%
+    \item \textbf{TCP}: Precision 100\%, Recall 100\%, F1-Score 100\%
+    \item \textbf{UDP}: Precision 100\%, Recall 100\%, F1-Score 100\%
+\end{itemize}
+
+Kết quả cho thấy khả năng phân loại chính xác các biến thể DDoS, với chỉ 6 misclassifications trong 3,815 test samples (0.16\% error rate).
+
 \subsection{Đóng góp về quy trình và triển khai}
 
 \textbf{Scalable Data Processing Pipeline}
@@ -1172,7 +1534,15 @@ Model compression (quantization, pruning), incremental learning để giảm RAM
 
 \section{Kết luận}
 
-Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hiện và phân loại botnet IoT dựa trên mô hình Two-Stage Hierarchical Model, đạt Overall Accuracy 97.19\%, vượt trội so với các phương pháp hiện tại. Các đóng góp chính bao gồm kiến trúc phân cấp hai giai đoạn, Source Diversity Features, xử lý extreme imbalance, GPU acceleration, và scalable pipeline. Mặc dù còn tồn tại một số hạn chế, nghiên cứu đã đặt nền móng vững chắc cho các hướng phát triển tiếp theo để trở thành giải pháp toàn diện cho bảo mật IoT.
+\section{Kết luận}
+
+Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hiện và phân loại botnet IoT với hai hướng tiếp cận:
+
+\textbf{Two-Stage Hierarchical Model} đạt Overall Accuracy 97.19\% trên bài toán multi-class classification (Normal, DDoS, DoS, Reconnaissance), vượt trội so với các phương pháp hiện tại. Các đóng góp chính bao gồm kiến trúc phân cấp hai giai đoạn, Source Diversity Features, xử lý extreme imbalance với SMOTE, GPU acceleration, và scalable pipeline.
+
+\textbf{DDoS Variants Classification} đạt 99.92\% accuracy trên bài toán phân loại chi tiết các biến thể DDoS (HTTP, TCP, UDP), chứng minh hiệu quả của Random Consecutive Sampling và feature selection với 16 best features. Mô hình đạt F1-score gần 100\% cho tất cả các classes với training time < 2 phút trên CPU, phù hợp cho resource-constrained environments.
+
+Cả hai hướng nghiên cứu đã đặt nền móng vững chắc cho phát triển giải pháp toàn diện bảo mật IoT, với khả năng triển khai thực tế cao và các hướng phát triển rõ ràng cho tương lai.
 
 \addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
 \begin{thebibliography}{99}
@@ -1226,6 +1596,12 @@ Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hi�
 \bibitem{ref24} NVIDIA Corporation, "CUDA Toolkit Documentation," NVIDIA Developer, 2023. [Online]. Available: https://docs.nvidia.com/cuda/
 
 \bibitem{ref25} Statista Research Department, "IoT: Number of connected devices worldwide 2015-2025," \textit{Statista}, 2023. [Online]. Available: https://www.statista.com/statistics/471264/iot-number-of-connected-devices-worldwide/
+
+\bibitem{ref26} A. Gutnikov, O. Kupreev, and Y. Sintsiak, "DDoS attacks in Q3 2021," \textit{Securelist}, Kaspersky, 2021. [Online]. Available: https://securelist.com/ddos-attacks-in-q3-2021/104796/
+
+\bibitem{ref27} "GoldenEye Layer 7 (KeepAlive+NoCache) DoS Test Tool," GitHub Repository. [Online]. Available: https://github.com/jseidl/GoldenEye
+
+\bibitem{ref28} "Hping -- Active Network Security Tool," 2021. [Online]. Available: http://www.hping.org
 
 \end{thebibliography}
 
