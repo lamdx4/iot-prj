@@ -75,5 +75,14 @@ logs/
 *.bak
 **/context/
 
+# Detec demo - Argus capture files
+*.argus
+*.pcap
+*.pcapng
+
+# Detec demo - Generated flow files
+src/detec_demo/detector/flows/flows_*.txt
+src/detec_demo/detector/flows/flows_*.backup
+
 Dataset/
 Ground Truth/
