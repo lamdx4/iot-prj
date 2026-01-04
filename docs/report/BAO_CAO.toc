@@ -1,0 +1,120 @@
+\babel@toc {vietnamese}{}\relax 
+\contentsline {chapter}{\numberline {1}TỔNG QUAN}{4}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Bối cảnh và vấn đề nghiên cứu}{4}{section.1.1}%
+\contentsline {subsection}{\numberline {1.1.1}Thực trạng an ninh mạng trong hệ sinh thái IoT}{4}{subsection.1.1.1}%
+\contentsline {subsection}{\numberline {1.1.2}Các cuộc tấn công botnet IoT điển hình}{4}{subsection.1.1.2}%
+\contentsline {subsection}{\numberline {1.1.3}Thách thức trong phát hiện và phòng chống}{4}{subsection.1.1.3}%
+\contentsline {subsection}{\numberline {1.1.4}Tổng quan các nghiên cứu liên quan}{5}{subsection.1.1.4}%
+\contentsline {section}{\numberline {1.2}Tính cấp thiết của đề tài}{5}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Khoảng trống nghiên cứu}{5}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}Hạn chế của các phương pháp hiện tại}{6}{subsection.1.2.2}%
+\contentsline {section}{\numberline {1.3}Mục tiêu nghiên cứu}{6}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Mục tiêu tổng quát}{6}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}Mục tiêu cụ thể}{6}{subsection.1.3.2}%
+\contentsline {section}{\numberline {1.4}Phạm vi nghiên cứu và đối tượng nghiên cứu}{7}{section.1.4}%
+\contentsline {subsection}{\numberline {1.4.1}Phạm vi nghiên cứu}{7}{subsection.1.4.1}%
+\contentsline {subsection}{\numberline {1.4.2}Đối tượng nghiên cứu}{8}{subsection.1.4.2}%
+\contentsline {section}{\numberline {1.5}Hướng tiếp cận và phương pháp thực hiện}{8}{section.1.5}%
+\contentsline {subsection}{\numberline {1.5.1}Hướng tiếp cận tổng quát}{8}{subsection.1.5.1}%
+\contentsline {subsection}{\numberline {1.5.2}Phương pháp thực hiện}{8}{subsection.1.5.2}%
+\contentsline {section}{\numberline {1.6}Ý nghĩa khoa học và thực tiễn}{9}{section.1.6}%
+\contentsline {subsection}{\numberline {1.6.1}Ý nghĩa khoa học}{9}{subsection.1.6.1}%
+\contentsline {subsection}{\numberline {1.6.2}Ý nghĩa thực tiễn}{10}{subsection.1.6.2}%
+\contentsline {section}{\numberline {1.7}Cấu trúc báo cáo}{10}{section.1.7}%
+\contentsline {chapter}{\numberline {2}MÔ HÌNH ĐỀ XUẤT}{11}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Kiến trúc tổng thể hệ thống}{11}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Sơ đồ tổng quan}{11}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}Các thành phần chính}{12}{subsection.2.1.2}%
+\contentsline {section}{\numberline {2.2}Các thuật toán và mô-đun chính}{13}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Thuật toán XGBoost (Extreme Gradient Boosting)}{13}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Thuật toán SMOTE (Synthetic Minority Over-sampling Technique)}{13}{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.2.3}Thuật toán tính Source Diversity Features}{14}{subsection.2.2.3}%
+\contentsline {subsection}{\numberline {2.2.4}Mô-đun GPU Optimization}{15}{subsection.2.2.4}%
+\contentsline {section}{\numberline {2.3}Quy trình hoạt động chi tiết}{16}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Tổng quan quy trình}{16}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}Step 0: Merge và phân tích batches}{16}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}Step 1: Tạo balanced test set}{17}{subsection.2.3.3}%
+\contentsline {subsection}{\numberline {2.3.4}Step 2: Load training data}{17}{subsection.2.3.4}%
+\contentsline {subsection}{\numberline {2.3.5}Step 3: Load test data}{17}{subsection.2.3.5}%
+\contentsline {subsection}{\numberline {2.3.6}Step 4: Feature Engineering}{18}{subsection.2.3.6}%
+\contentsline {subsection}{\numberline {2.3.7}Step 5: Train Stage 1 (Binary Classification)}{18}{subsection.2.3.7}%
+\contentsline {subsection}{\numberline {2.3.8}Step 6: Train Stage 2 (Multi-class Classification)}{19}{subsection.2.3.8}%
+\contentsline {subsection}{\numberline {2.3.9}Step 7: Combined Pipeline Evaluation}{19}{subsection.2.3.9}%
+\contentsline {section}{\numberline {2.4}Công cụ, công nghệ và nền tảng triển khai}{19}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}Ngôn ngữ lập trình và thư viện}{19}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}Môi trường huấn luyện}{19}{subsection.2.4.2}%
+\contentsline {section}{\numberline {2.5}Hệ thống phân loại chi tiết các biến thể DDoS}{20}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}Động lực và mục tiêu}{20}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}Dataset và phương pháp cân bằng}{20}{subsection.2.5.2}%
+\contentsline {subsubsection}{Hạn chế của SMOTE trong bài toán DDoS IoT}{20}{subsection.2.5.2}%
+\contentsline {subsubsection}{Random Consecutive Sampling}{21}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}Kiến trúc mô hình phân loại đa lớp}{22}{subsection.2.5.3}%
+\contentsline {subsection}{\numberline {2.5.4}Lựa chọn đặc trưng -- 16 Best Features}{22}{subsection.2.5.4}%
+\contentsline {subsubsection}{(1) Basic flow metrics (4 features)}{22}{subsection.2.5.4}%
+\contentsline {subsubsection}{(2) Statistical aggregations (5 features)}{22}{subsection.2.5.4}%
+\contentsline {subsubsection}{(3) Directional metrics (4 features)}{22}{subsection.2.5.4}%
+\contentsline {subsubsection}{(4) Rate-based features (3 features)}{22}{subsection.2.5.4}%
+\contentsline {subsubsection}{Lý do loại bỏ các nhóm feature khác}{22}{subsection.2.5.4}%
+\contentsline {subsection}{\numberline {2.5.5}Siêu tham số}{23}{subsection.2.5.5}%
+\contentsline {subsection}{\numberline {2.5.6}Quy trình huấn luyện}{23}{subsection.2.5.6}%
+\contentsline {section}{\numberline {2.6}Phân tích độ phức tạp và đánh giá tối ưu hóa}{23}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Độ phức tạp về thời gian (Time Complexity)}{23}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Độ phức tạp về không gian (Space Complexity)}{24}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Đánh giá tối ưu hóa}{24}{subsection.2.6.3}%
+\contentsline {chapter}{\numberline {3}THỰC NGHIỆM VÀ THẢO LUẬN}{25}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Môi trường thực nghiệm}{25}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Cấu hình phần cứng}{25}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Môi trường phần mềm}{26}{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.1.3}Tập dữ liệu}{26}{subsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.1.4}Siêu tham số mô hình}{28}{subsection.3.1.4}%
+\contentsline {section}{\numberline {3.2}Kết quả thực nghiệm}{29}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Kết quả huấn luyện}{29}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Confusion Matrix và phân tích chi tiết}{29}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Training Curves}{31}{subsection.3.2.3}%
+\contentsline {section}{\numberline {3.3}Đánh giá hiệu năng}{31}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Đánh giá chi tiết theo từng loại}{31}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Đánh giá hiệu năng tính toán}{32}{subsection.3.3.2}%
+\contentsline {section}{\numberline {3.4}Kết quả phân loại chi tiết các biến thể DDoS}{32}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}Phân bố các lớp sau khi cân bằng}{32}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}Phân tích tương quan giữa 16 đặc trưng}{33}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}Quá trình huấn luyện mô hình}{34}{subsection.3.4.3}%
+\contentsline {subsection}{\numberline {3.4.4}Kết quả đánh giá tổng thể}{35}{subsection.3.4.4}%
+\contentsline {subsection}{\numberline {3.4.5}Ma trận nhầm lẫn (Confusion Matrix)}{36}{subsection.3.4.5}%
+\contentsline {subsection}{\numberline {3.4.6}Hiệu năng theo từng lớp}{37}{subsection.3.4.6}%
+\contentsline {section}{\numberline {3.5}Phân tích và thảo luận kết quả}{38}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}Điểm thành công}{38}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}Hạn chế và thách thức}{38}{subsection.3.5.2}%
+\contentsline {section}{\numberline {3.6}DEMO HỆ THỐNG PHÁT HIỆN DDOS}{38}{section.3.6}%
+\contentsline {subsection}{\numberline {3.6.1}Kiến trúc hệ thống demo}{39}{subsection.3.6.1}%
+\contentsline {subsubsection}{Tổng quan kiến trúc}{39}{subsection.3.6.1}%
+\contentsline {subsubsection}{Các thành phần hệ thống}{39}{subsection.3.6.1}%
+\contentsline {subsubsection}{Luồng dữ liệu}{39}{subsection.3.6.1}%
+\contentsline {subsection}{\numberline {3.6.2}Prometheus Metrics Specification}{39}{subsection.3.6.2}%
+\contentsline {subsubsection}{Giới thiệu Prometheus}{39}{subsection.3.6.2}%
+\contentsline {subsubsection}{Metric: ddos\_attack\_windows\_total (Counter)}{39}{subsection.3.6.2}%
+\contentsline {subsubsection}{Metric: ddos\_normal\_windows\_total (Counter)}{39}{subsection.3.6.2}%
+\contentsline {subsubsection}{Metric: ddos\_packet\_rate (Gauge)}{40}{subsection.3.6.2}%
+\contentsline {subsubsection}{Metric: ddos\_src\_entropy (Gauge)}{40}{subsection.3.6.2}%
+\contentsline {subsubsection}{Ví dụ PromQL}{40}{subsection.3.6.2}%
+\contentsline {subsection}{\numberline {3.6.3}Grafana Dashboard Configuration}{40}{subsection.3.6.3}%
+\contentsline {subsubsection}{Tổng quan Dashboard}{40}{subsection.3.6.3}%
+\contentsline {subsubsection}{Traffic Classification Results (Stat)}{41}{figure.3.12}%
+\contentsline {subsubsection}{Attack Type Distribution (Bar Chart, Stage 2)}{42}{figure.3.13}%
+\contentsline {subsubsection}{DDoS Variants Distribution (Donut, Stage 3)}{42}{figure.3.14}%
+\contentsline {subsubsection}{Packet Rate per Destination IP (Bar Gauge)}{43}{figure.3.15}%
+\contentsline {subsubsection}{Source IP Entropy (Gauge)}{44}{figure.3.16}%
+\contentsline {subsubsection}{Attack Classification Breakdown (Pie)}{44}{figure.3.17}%
+\contentsline {subsubsection}{Attack Detection Rate (Stat, Stage 1)}{45}{figure.3.18}%
+\contentsline {subsubsection}{Tổng kết về Dashboard}{46}{figure.3.19}%
+\contentsline {subsection}{\numberline {3.6.4}Phân tích và đánh giá}{46}{subsection.3.6.4}%
+\contentsline {subsubsection}{Hiệu quả giám sát (batch/near real-time khi chạy lặp)}{46}{subsection.3.6.4}%
+\contentsline {subsubsection}{Ưu điểm kiến trúc 3-stage + Prometheus/Grafana}{46}{subsection.3.6.4}%
+\contentsline {subsubsection}{Nhận xét về kết quả demo}{47}{subsection.3.6.4}%
+\contentsline {section}{\numberline {3.7}Kết luận chương}{47}{section.3.7}%
+\contentsline {chapter}{\numberline {4}KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}{48}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Tóm tắt kết quả}{48}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Đóng góp chính}{48}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Hạn chế}{49}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Hướng phát triển}{49}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Kết luận}{50}{section.4.5}%
+\contentsline {chapter}{TÀI LIỆU THAM KHẢO}{50}{section.4.5}%

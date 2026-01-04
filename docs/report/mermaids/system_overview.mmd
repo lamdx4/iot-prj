@@ -1,0 +1,44 @@
+flowchart TD
+    subgraph INPUT["📥 INPUT"]
+        A["Network Flow Data<br/>(22 features)"]
+    end
+
+    subgraph STAGE1["🔵 STAGE 1: Binary Classification"]
+        B["XGBoost Binary Classifier"]
+        B --> C{Attack?}
+    end
+
+    subgraph STAGE2["🟠 STAGE 2: Attack Type Classification"]
+        D["XGBoost Multi-class"]
+        D --> E{Type?}
+    end
+
+    subgraph STAGE3["🟣 STAGE 3: DDoS Variant Classification"]
+        F["XGBoost Multi-class"]
+        F --> G{Variant?}
+    end
+
+    subgraph OUTPUT["📤 OUTPUT"]
+        OUT1["✅ Normal"]
+        OUT2["⚡ DoS"]
+        OUT3["🔍 Reconnaissance"]
+        OUT4["🌐 DDoS-HTTP"]
+        OUT5["🔗 DDoS-TCP"]
+        OUT6["📡 DDoS-UDP"]
+    end
+
+    A --> B
+    C -->|"No"| OUT1
+    C -->|"Yes"| D
+    E -->|"DoS"| OUT2
+    E -->|"Recon"| OUT3
+    E -->|"DDoS"| F
+    G -->|"HTTP"| OUT4
+    G -->|"TCP"| OUT5
+    G -->|"UDP"| OUT6
+
+    style STAGE1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style STAGE2 fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style STAGE3 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style INPUT fill:#e8f5e9,stroke:#2e7d32
+    style OUTPUT fill:#fce4ec,stroke:#c2185b
