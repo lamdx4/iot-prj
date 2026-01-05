@@ -4,6 +4,9 @@ import math
 import os
 import re 
 import time
+import queue
+import socket
+from multiprocessing import Queue
 
 from prometheus_client import Counter as PromCounter, Gauge, start_http_server
 from collections import Counter, defaultdict
@@ -26,6 +29,21 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# Scapy import with fallback (for PCAP parsing)
+try:
+    from scapy.all import PcapReader
+    from scapy.layers.inet import IP, TCP, UDP, ICMP
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
+    logger.warning("Scapy not available. PCAP parsing will be disabled. Install: pip install scapy")
+    # Dummy imports for type checking (never used at runtime if SCAPY_AVAILABLE is False)
+    PcapReader = None  # type: ignore[assignment]
+    IP = None  # type: ignore[assignment]
+    TCP = None  # type: ignore[assignment]
+    UDP = None  # type: ignore[assignment]
+    ICMP = None  # type: ignore[assignment]
 
 
 # -----------------------
@@ -63,9 +81,6 @@ SRC_ENTROPY = Gauge(
 WINDOW_SIZE = 30
 DEFAULT_DUR = float(WINDOW_SIZE)
 
-# For SYN-heavy traffic, bytes are hard to infer from Argus meta; keep a conservative estimate
-DEFAULT_BYTES_PER_PKT = 60  # ~ minimal TCP/IP headers order of magnitude
-
 
 # -----------------------
 # Utilities
@@ -83,237 +98,252 @@ def shannon_entropy_from_counts(counts: Iterable[int]) -> float:
     return ent
 
 
-def safe_float(x: Any, default: float = 0.0) -> float:
-    try:
-        if x is None:
-            return default
-        if isinstance(x, (int, float, np.number)):
-            return float(x)
-        s = str(x).strip()
-        if s == "" or s.lower() in {"nan", "none"}:
-            return default
-        return float(s)
-    except Exception:
-        return default
-
-
-def safe_int(x: Any, default: int = 0) -> int:
-    try:
-        if x is None:
-            return default
-        if isinstance(x, (int, np.integer)):
-            return int(x)
-        s = str(x).strip()
-        if s == "" or s.lower() in {"nan", "none"}:
-            return default
-        return int(float(s))
-    except Exception:
-        return default
-
-
-def normalize_port(v: Any) -> int:
-    """
-    Argus output sometimes prints service name (http/https).
-    Make ports numeric because your downstream code may need it for sanity checks.
-    (Ports are not part of 22 features, but keeping it clean avoids confusion.)
-    """
-    if v is None:
-        return 0
-    s = str(v).strip().lower()
-    if s == "http":
-        return 80
-    if s == "https":
-        return 443
-    return safe_int(s, 0)
-
-
-def parse_hms_micro_to_epoch_seconds(hms: str) -> float:
-    """
-    Argus '-c' often prints only time-of-day: HH:MM:SS.xxxxxx (no date).
-    We'll anchor it to today's date. Since you only need relative windows,
-    any consistent anchor is fine.
-    """
-    today = date.today().isoformat()
-    # Accept both with/without microseconds
-    if "." in hms:
-        dt = datetime.strptime(f"{today} {hms}", "%Y-%m-%d %H:%M:%S.%f")
-    else:
-        dt = datetime.strptime(f"{today} {hms}", "%Y-%m-%d %H:%M:%S")
-    return dt.timestamp()
-
-
-# -----------------------
-# Parsing flows_c (-c)
-# -----------------------
-TIME_RE = re.compile(r"(?P<t>\d{2}:\d{2}:\d{2}(?:\.\d+)?)")
-IP_RE = re.compile(r"(?P<ip>\d{1,3}(?:\.\d{1,3}){3})")
-# Note: Argus compact format doesn't have word boundaries, so match tcp/udp/icmp anywhere
-PROTO_RE = re.compile(r"(tcp|udp|icmp)", re.IGNORECASE)
-
-# In your '-c' output the delimiter appears to be "s" (compact output)
-# Example:
-# 12:35:00.289552s          stcps172.19.0.5s35238ss172.19.0.3shttpssINT
-# We'll parse robustly by extracting time + proto + ips + ports when present.
-PORT_RE = re.compile(r"\b(\d{1,5}|http|https)\b", re.IGNORECASE)
-
-
 @dataclass
 class EventC:
     t_epoch: float
     saddr: str
     daddr: str
     proto: str
+    bytes: int = 0  # Packet size in bytes
+    sport: int = 0  # Source port
+    dport: int = 0  # Destination port (critical for HTTP detection)
+    tcp_flags: int = 0  # TCP flags bitmask (0x02=SYN, 0x10=ACK, 0x01=FIN, 0x04=RST, etc.)
 
 
-def load_events_from_flows_c(path: str, limit_lines: Optional[int] = None) -> List[EventC]:
+# -----------------------
+# Scapy Packet Conversion (For Queue Mode)
+# -----------------------
+def scapy_packets_to_events(packets: List, global_t0: Optional[float] = None) -> Tuple[List[EventC], float]:
+    """
+    Convert Scapy packet objects (from victim queue) to EventC format
+    This allows processing in-memory packets without file I/O
+    
+    Args:
+        packets: List of Scapy packet objects
+        global_t0: Optional global time reference (for consistency)
+        
+    Returns:
+        Tuple of (events list, global_t0)
+    """
+    if not SCAPY_AVAILABLE:
+        raise ImportError("Scapy is required. Install: pip install scapy")
+    
     events: List[EventC] = []
-    with open(path, "r", errors="ignore") as f:
-        for i, line in enumerate(f):
-            if limit_lines is not None and i >= limit_lines:
-                break
-            line = line.strip()
-            if not line:
+    
+    logger.info(f"Converting {len(packets)} Scapy packets to EventC format")
+    
+    skipped_count = 0
+    
+    for pkt in packets:
+        try:
+            # Check if packet has IP layer
+            if not pkt.haslayer(IP):
+                skipped_count += 1
                 continue
-            # skip header / management
-            if "StartTime" in line or "Proto" in line:
-                continue
-            if " man" in line or line.endswith("STA") or "sman" in line:
-                continue
-
-            mtime = TIME_RE.search(line)
-            mproto = PROTO_RE.search(line)
-            ips = IP_RE.findall(line)
-
-            if not (mtime and mproto and len(ips) >= 2):
-                continue
-
-            t_epoch = parse_hms_micro_to_epoch_seconds(mtime.group("t"))
-            proto = mproto.group(1).lower()
-            saddr, daddr = ips[0], ips[1]
-
-            events.append(EventC(t_epoch=t_epoch, saddr=saddr, daddr=daddr, proto=proto))
-    return events
+            
+            ip = pkt[IP]
+            
+            # Extract timestamp
+            t_epoch = float(pkt.time)
+            
+            # Set GLOBAL_T0 from first packet if not provided
+            if global_t0 is None:
+                global_t0 = t_epoch
+            
+            # Extract addresses and size
+            saddr = ip.src
+            daddr = ip.dst
+            pkt_bytes = len(pkt)
+            
+            # Protocol detection
+            sport = 0
+            dport = 0
+            proto = 'tcp'  # Default to 'tcp' (most common, always in training)
+            tcp_flags = 0
+            
+            if pkt.haslayer(TCP):
+                tcp = pkt[TCP]
+                proto = 'tcp'
+                sport = tcp.sport
+                dport = tcp.dport
+                tcp_flags = int(tcp.flags)  # Extract TCP flags bitmask
+            elif pkt.haslayer(UDP):
+                udp = pkt[UDP]
+                proto = 'udp'
+                sport = udp.sport
+                dport = udp.dport
+            elif pkt.haslayer(ICMP):
+                proto = 'icmp'
+            # Note: Other protocols (ARP, IPv6, etc.) default to 'tcp' to match training data
+            
+            # Create EventC object
+            events.append(EventC(
+                t_epoch=t_epoch,
+                saddr=saddr,
+                daddr=daddr,
+                proto=proto,
+                bytes=pkt_bytes,
+                sport=sport,
+                dport=dport,
+                tcp_flags=tcp_flags
+            ))
+            
+        except Exception as e:
+            skipped_count += 1
+            continue
+    
+    logger.info(f"Conversion complete:")
+    logger.info(f"  Valid IP events: {len(events):,}")
+    logger.info(f"  Skipped (non-IP): {skipped_count:,}")
+    logger.info(f"  GLOBAL_T0: {global_t0}")
+    
+    if not events:
+        logger.warning("No valid IP packets found!")
+    
+    # Ensure global_t0 is always float
+    if global_t0 is None:
+        global_t0 = 0.0
+        logger.warning("No valid packets found, using default T0=0.0")
+    
+    return events, global_t0
 
 
 # -----------------------
-# Parsing flows_s (-s)
+# PCAP Parsing (Direct Read)
 # -----------------------
-@dataclass
-class MetaS:
-    saddr: str
-    daddr: str
-    sport: int
-    dport: int
-    proto: str
-    state: str
-    flgs: str
-    pkts: int
-    bytes: int
-    dur: float
-
-
-def load_meta_from_flows_s(path: str, limit_lines: Optional[int] = None) -> List[MetaS]:
-    """
-    flows_s.txt is usually whitespace formatted.
-    We'll parse by splitting, ignoring header-like lines.
-
-    Expected typical columns:
-      SrcAddr DstAddr Sport Dport Proto State Flgs TotPkts TotBytes Dur
-    Some exports may omit Flgs or have blanks -> handle defensively.
-    """
-    metas: List[MetaS] = []
-
-    with open(path, "r", errors="ignore") as f:
-        for i, line in enumerate(f):
-            if limit_lines is not None and i >= limit_lines:
-                break
-            line = line.strip()
-            if not line:
-                continue
-            # Skip header-ish lines
-            if line.lower().startswith("srcaddr") or "DstAddr" in line or "TotPkts" in line:
-                continue
-
-            parts = line.split()
-            # We need at minimum: saddr daddr sport dport proto state dur (len ~ 7+)
-            if len(parts) < 7:
-                continue
-
-            saddr = parts[0]
-            daddr = parts[1]
-            sport = normalize_port(parts[2])
-            dport = normalize_port(parts[3])
-            proto = str(parts[4]).lower()
-            state = str(parts[5])
-
-            # Flgs may be missing/blank; Argus sometimes shifts columns.
-            # Try to detect pkts/bytes/dur at the end.
-            # We'll read last token as dur, previous as bytes, previous as pkts (if numeric).
-            dur = safe_float(parts[-1], 0.0)
-            bytes_ = safe_int(parts[-2], 0) if len(parts) >= 2 else 0
-            pkts = safe_int(parts[-3], 0) if len(parts) >= 3 else 0
-
-            # flgs is what's between state and pkts if present
-            flgs = ""
-            # candidate middle segment:
-            mid = parts[6:-3]
-            if mid:
-                # join (rarely multiple)
-                flgs = " ".join(mid)
-
-            # Basic proto filter
-            if proto not in {"tcp", "udp", "icmp"} and proto != "man":
-                # keep unknown but mark
-                pass
-
-            metas.append(
-                MetaS(
+def load_events_from_pcap(
+    path: str, 
+    max_packets: Optional[int] = None
+) -> Tuple[List[EventC], float]:
+    
+    if not SCAPY_AVAILABLE:
+        raise ImportError("Scapy is required for PCAP parsing. Install: pip install scapy")
+    
+    events: List[EventC] = []
+    global_t0 = None
+    
+    logger.info(f"Opening PCAP file: {path}")
+    if max_packets:
+        logger.info(f"  Packet limit: {max_packets:,}")
+    
+    packet_count = 0
+    skipped_count = 0
+    
+    try:
+        with PcapReader(path) as reader:  # type: ignore[misc]
+            for pkt in reader:
+                packet_count += 1
+                
+                # Check limit first (fast path)
+                if max_packets and len(events) >= max_packets:
+                    break
+                
+                # Extract timestamp from PCAP header (exact microsecond precision)
+                t_epoch = float(pkt.time)
+                
+                # Set GLOBAL_T0 from first packet (for consistent time windows)
+                if global_t0 is None:
+                    global_t0 = t_epoch
+                
+                # Fast IP layer check using hasattr (faster than haslayer)
+                try:
+                    ip = pkt.getlayer('IP')
+                    if ip is None:
+                        skipped_count += 1
+                        continue
+                    
+                    saddr = ip.src
+                    daddr = ip.dst
+                    pkt_bytes = len(pkt)
+                    
+                    # Fast protocol detection using getlayer (faster than haslayer)
+                    sport = 0
+                    dport = 0
+                    proto = 'tcp'  # Default to 'tcp' (most common, always in training)
+                    tcp_flags = 0
+                    
+                    tcp = pkt.getlayer('TCP')
+                    if tcp:
+                        proto = 'tcp'
+                        sport = tcp.sport
+                        dport = tcp.dport
+                        tcp_flags = int(tcp.flags)  # Extract TCP flags bitmask
+                    else:
+                        udp = pkt.getlayer('UDP')
+                        if udp:
+                            proto = 'udp'
+                            sport = udp.sport
+                            dport = udp.dport
+                        elif pkt.getlayer('ICMP'):
+                            proto = 'icmp'
+                        # Note: Other protocols (ARP, IPv6, etc.) default to 'tcp' to match training data
+                
+                except (AttributeError, IndexError):
+                    skipped_count += 1
+                    continue
+                
+                # Create event with exact timestamp, bytes, and ports
+                events.append(EventC(
+                    t_epoch=t_epoch,
                     saddr=saddr,
                     daddr=daddr,
+                    proto=proto,
+                    bytes=pkt_bytes,
                     sport=sport,
                     dport=dport,
-                    proto=proto,
-                    state=state,
-                    flgs=flgs,
-                    pkts=pkts,
-                    bytes=bytes_,
-                    dur=dur,
-                )
-            )
-    return metas
+                    tcp_flags=tcp_flags
+                ))
+        
+        logger.info(f"PCAP parsing complete:")
+        logger.info(f"  Total packets read: {packet_count:,}")
+        logger.info(f"  Valid IP events: {len(events):,}")
+        logger.info(f"  Skipped (non-IP): {skipped_count:,}")
+        logger.info(f"  GLOBAL_T0: {global_t0}")
+        
+        if not events:
+            logger.warning("No valid IP packets found in PCAP file!")
+        
+        # Ensure global_t0 is always float (fallback to 0.0 if None)
+        if global_t0 is None:
+            global_t0 = 0.0
+            logger.warning("No valid packets found, using default T0=0.0")
+        
+        return events, global_t0
+    
+    except FileNotFoundError:
+        logger.error(f"PCAP file not found: {path}")
+        raise
+    except Exception as e:
+        logger.error(f"Error reading PCAP file: {e}")
+        raise
 
 
 # -----------------------
-# Feature building (22 features)
+# Feature Engineering (22 features)
 # -----------------------
 def build_22_features(
     events: List[EventC],
-    metas: List[MetaS],
     window_size: int = WINDOW_SIZE,
+    global_t0: Optional[float] = None,
 ) -> pd.DataFrame:
-    """
-    Training logic (your docs):
-      - time_window = floor(stime / 30)
-      - group by (time_window, daddr)
-      - compute unique_src_count, src_entropy, top_src_ratio
-    We'll do the same with RELATIVE time derived from event timestamps.
-    """
+    
     if not events:
         return pd.DataFrame()
 
-    # Convert to DataFrame
+    # Convert events to DataFrame
     df_e = pd.DataFrame([e.__dict__ for e in events])
-    # relative time to mimic stime scale; only windows matter
-    t0 = df_e["t_epoch"].min()
-    df_e["stime"] = df_e["t_epoch"] - t0  # seconds since start capture
+    
+    # Set GLOBAL_T0 for consistent time windows
+    if global_t0 is not None:
+        t0 = global_t0  # Use provided T0 (for multi-file consistency)
+        logger.debug(f"Using provided GLOBAL_T0: {t0}")
+    else:
+        t0 = df_e["t_epoch"].min()  # Use first packet as T0
+        logger.debug(f"Computed GLOBAL_T0 from first packet: {t0}")
+    
+    # Calculate relative time and time windows
+    df_e["stime"] = df_e["t_epoch"] - t0  # seconds since T0
     df_e["time_window"] = (df_e["stime"] // float(window_size)).astype(int)
-
-    # metas: use them to enrich proto/state/flgs and (if non-zero) pkts/bytes/dur
-    df_m = pd.DataFrame([m.__dict__ for m in metas]) if metas else pd.DataFrame()
-    if not df_m.empty:
-        # normalize proto to lowercase
-        df_m["proto"] = df_m["proto"].astype(str).str.lower()
-        df_m["time_window"] = -1  # no timestamps in -s; we will use daddr-level mode only
 
     rows: List[Dict[str, Any]] = []
 
@@ -333,12 +363,12 @@ def build_22_features(
         min_iat = float(np.min(iat))
         max_iat = float(np.max(iat))
 
-        # Packet/bytes: event-level gives you a "packet-like" count
+        # Packet count and bytes from PCAP
         pkts = int(len(g))
-        bytes_ = int(pkts * DEFAULT_BYTES_PER_PKT)
+        bytes_ = int(g["bytes"].sum())  # Exact bytes from PCAP packets
 
-        # Duration: in training you kept 'dur' and used windowing on 'stime'.
-        # For inference, safest is window size; optionally use span if longer.
+        # Duration: calculate from packet timestamps
+        # Use actual time span or default to window size
         dur_span = float(stimes[-1] - stimes[0]) if len(stimes) >= 2 else 0.0
         dur = max(DEFAULT_DUR, dur_span) if dur_span > 0 else DEFAULT_DUR
 
@@ -366,48 +396,58 @@ def build_22_features(
         if not np.isfinite(top_src_ratio) or top_src_ratio <= 0:
             top_src_ratio = 1.0
 
-        # proto: use mode from events first
+        # Protocol: use mode from packets in this window
         proto = str(g["proto"].mode().iloc[0]).lower() if not g["proto"].mode().empty else "tcp"
 
-        # state/flgs/dport: enrich from metas if available for same daddr
-        # NOTE: flows_s does NOT have timestamp → we can only match by daddr
-        # This is acceptable because flows_s is ONLY used for categorical enrichment
-        state = ""
-        flgs = ""
+        # Destination port: extract from PCAP packets (critical for HTTP detection)
         dport = ""
-
-        if not df_m.empty:
-            dm = df_m[df_m["daddr"] == daddr]
-            if not dm.empty:
-                # Enrich categorical features from flows_s
-                state_mode = dm["state"].dropna().astype(str)
-                flgs_mode = dm["flgs"].dropna().astype(str)
-                proto_mode = dm["proto"].dropna().astype(str)
-                dport_mode = dm["dport"].dropna().astype(str)
-
-                if not proto_mode.empty:
-                    proto = proto_mode.mode().iloc[0].lower()
-                if not state_mode.empty:
-                    state = state_mode.mode().iloc[0]
-                if not flgs_mode.empty:
-                    # flgs sometimes blank; choose the most common non-blank
-                    non_blank = flgs_mode[flgs_mode.str.strip() != ""]
-                    if not non_blank.empty:
-                        flgs = non_blank.mode().iloc[0]
+        if "dport" in g.columns:
+            dport_values = g["dport"].dropna()
+            if not dport_values.empty and dport_values.sum() > 0:
+                # Use mode (most common port) for this window
+                dport_mode = dport_values.mode()
                 if not dport_mode.empty:
-                    dport = dport_mode.mode().iloc[0]
+                    dport = str(int(dport_mode.iloc[0]))
+        
+        # TCP Flags: Aggregate from packets in window
+        flgs = ""
+        if proto == "tcp" and "tcp_flags" in g.columns:
+            # Collect unique TCP flags from all packets
+            flag_set = set()
+            for flags in g["tcp_flags"]:
+                if flags > 0:
+                    if flags & 0x02: flag_set.add('S')  # SYN
+                    if flags & 0x10: flag_set.add('A')  # ACK
+                    if flags & 0x01: flag_set.add('F')  # FIN
+                    if flags & 0x04: flag_set.add('R')  # RST
+                    if flags & 0x08: flag_set.add('P')  # PSH
+            # Sort for consistency (e.g., "AFPS")
+            flgs = ''.join(sorted(flag_set)) if flag_set else ""
+        
+        # State: Approximate from TCP flags + packet pattern
+        state = ""
+        if proto == "tcp":
+            # Derive state from flags and bidirectional traffic
+            if 'R' in flgs:
+                state = "RST"  # Reset connection
+            elif 'F' in flgs:
+                state = "FIN"  # Connection finishing
+            elif 'S' in flgs and 'A' not in flgs:
+                state = "REQ"  # SYN only (request without response)
+            elif dpkts > 0:  # Bidirectional traffic
+                state = "CON"  # Established connection (with responses)
+            else:  # Only source packets (typical for attacks)
+                state = "INT"  # Interrupted/one-way (no response from destination)
+        elif proto == "udp":
+            # UDP is connectionless
+            state = "CON" if dpkts > 0 else "INT"
+        elif proto == "icmp":
+            state = "CON" if dpkts > 0 else "INT"
+        else:
+            state = "INT"  # Default for other protocols
 
-                # IMPORTANT: DO NOT override pkts/bytes/dur from flows_s
-                # Reason:
-                # 1. flows_c (event-level) is MORE ACCURATE than flows_s (flow summary)
-                # 2. SYN flood → flows_s often has pkts=0 (incomplete flows)
-                # 3. Training used event-level counts → inference must match
-                # 4. Overriding can cause INCORRECT feature values
-                #
-                # We keep pkts/bytes/dur computed from flows_c (event counts)
-
-        # seq: TCP sequence number not available from Argus summaries
-        # Training also used seq=0 for aggregated flows, so this is consistent
+        # TCP sequence number: not available from packet headers without stateful tracking
+        # For packet-level analysis, we set to 0 (matches training with aggregated data)
         seq = 0
 
         row = {
@@ -434,10 +474,10 @@ def build_22_features(
             "unique_src_count": unique_src_count,
             "src_entropy": src_entropy,
             "top_src_ratio": top_src_ratio,
-            # extras to help debug and fallback
+            # extras to help debug
             "_time_window": int(tw),
             "_daddr": str(daddr),
-            "Dport": dport,  # Add Dport for fallback logic
+            "Dport": dport,  # Destination port for analysis
         }
         rows.append(row)
 
@@ -563,34 +603,178 @@ def extract_stage3_features(df: pd.DataFrame) -> pd.DataFrame:
     return df[stage3_features]
 
 
-def check_if_http_port(dport_value) -> bool:
+# -----------------------
+# Queue-based Detection (For Victim Integration)
+# -----------------------
+def detector_server_main(input_queue: Queue, models_path: str = "./results/models") -> None:
     """
-    Check if Dport indicates HTTP traffic.
+    Main entry point for detector server running in queue mode.
+    Continuously receives packets from victim via queue, processes them through 3-stage pipeline.
     
     Args:
-        dport_value: Destination port (can be string name or numeric)
-        
-    Returns:
-        True if port indicates HTTP/HTTPS traffic, False otherwise
+        input_queue: Multiprocessing Queue receiving data from victim
+        models_path: Path to model files directory
     """
-    if pd.isna(dport_value):
-        return False
+    logger.info("="*60)
+    logger.info("DETECTOR SERVER - Queue Mode")
+    logger.info("="*60)
     
-    # Check symbolic names
-    if isinstance(dport_value, str):
-        dport_lower = dport_value.lower().strip()
-        if dport_lower in ['http', 'https', 'http-alt', 'www', 'www-http']:
-            return True
+    # Start Prometheus metrics
+    start_http_server(8000)
+    logger.info("[PROM] Metrics exposed at http://localhost:8000/metrics")
     
-    # Check numeric ports
+    # Load models
+    logger.info(f"Loading models from: {models_path}")
     try:
-        port_num = int(float(dport_value))
-        if port_num in [80, 443, 8080, 8443, 8000, 8888]:
-            return True
-    except (ValueError, TypeError):
-        pass
+        stage1 = joblib.load(os.path.join(models_path, "stage1.pkl"))
+        stage2 = joblib.load(os.path.join(models_path, "stage2.pkl"))
+        stage3 = xgb.Booster()
+        stage3.load_model(os.path.join(models_path, "stage3.json"))
+        label_encoder = joblib.load(os.path.join(models_path, "label_encoder.pkl"))
+        encoders = joblib.load(os.path.join(models_path, "encoders.pkl"))
+        feature_list = joblib.load(os.path.join(models_path, "features.pkl"))
+        mapping = joblib.load(os.path.join(models_path, "mapping.pkl"))
+        logger.info("All models loaded successfully")
+    except Exception as e:
+        logger.error(f"Failed to load models: {e}")
+        raise
     
-    return False
+    logger.info("Detector server started. Waiting for packets from victim...")
+    
+    batch_count = 0
+    global_t0 = None
+    
+    while True:
+        try:
+            # Get batch from queue (block with timeout)
+            try:
+                batch_data = input_queue.get(timeout=5)
+            except queue.Empty:
+                continue
+            
+            batch_count += 1
+            batch_id = batch_data.get('batch_id', batch_count)
+            packets = batch_data.get('packets', [])
+            packet_count = batch_data.get('packet_count', len(packets))
+            
+            logger.info(f"Processing batch {batch_id}: {packet_count} packets")
+            
+            if not packets:
+                logger.warning(f"Batch {batch_id}: Empty packet list")
+                continue
+            
+            # Convert Scapy packets to EventC
+            events, batch_t0 = scapy_packets_to_events(packets, global_t0)
+            
+            # Update global_t0 for time window consistency
+            if global_t0 is None:
+                global_t0 = batch_t0
+            
+            if not events:
+                logger.warning(f"Batch {batch_id}: No valid IP packets")
+                continue
+            
+            # Extract 22 features (for Stage 1 & 2)
+            logger.debug(f"Extracting 22 features...")
+            df_feat = build_22_features(events, window_size=WINDOW_SIZE, global_t0=global_t0)
+            df_feat.to_csv(f"features_batch_{batch_id}.csv", sep="\t", index=False)
+            if df_feat.empty:
+                logger.warning(f"Batch {batch_id}: Feature extraction failed")
+                continue
+            
+            logger.info(f"Extracted features: {len(df_feat)} windows")
+            
+            # Note: build_22_features() already fills missing values
+            
+            # Apply encoders
+            df_feat = apply_label_encoders_unknown_minus_one(df_feat, encoders)
+            
+            # Align features
+            df_feat = align_features(df_feat, feature_list)
+            
+            # Stage 1: Attack vs Normal
+            logger.debug("Running Stage 1 (Attack vs Normal)...")
+            X_feat = df_feat[feature_list].values
+            y1 = stage1.predict(X_feat)
+            
+            attack_mask = (y1 == 1)
+            normal_count = np.sum(~attack_mask)
+            attack_count = np.sum(attack_mask)
+            
+            logger.info(f"Stage 1: Normal={normal_count}, Attack={attack_count}")
+            
+            # Stage 2: Attack type classification
+            y2 = np.full(len(y1), "", dtype=object)
+            if attack_count > 0:
+                logger.debug("Running Stage 2 (Attack Type)...")
+                X_attack = X_feat[attack_mask]
+                y2_pred = stage2.predict(X_attack)
+                y2_mapped = map_predictions(y2_pred, mapping)
+                y2[attack_mask] = y2_mapped
+                
+                # Count attack types
+                attack_types = Counter(y2_mapped)
+                logger.info(f"Stage 2: {dict(attack_types)}")
+            
+            # Stage 3: DDoS variant classification
+            y3 = np.full(len(y1), "", dtype=object)
+            ddos_mask = (y2 == "ddos")
+            
+            if np.any(ddos_mask):
+                logger.debug("Running Stage 3 (DDoS Variants)...")
+                df_feat_stage3 = extract_stage3_features(df_feat)
+                X_ddos = df_feat_stage3.loc[ddos_mask].values
+                
+                dmatrix = xgb.DMatrix(X_ddos, feature_names=df_feat_stage3.columns.tolist())
+                y3_pred = stage3.predict(dmatrix)
+                
+                # Map numeric predictions to variant names
+                y3_variants = label_encoder.inverse_transform(y3_pred.astype(int))
+                y3[ddos_mask] = y3_variants
+                
+                variant_counts = Counter(y3_variants)
+                logger.info(f"Stage 3: {dict(variant_counts)}")
+            
+            # Update Prometheus metrics
+            for idx in range(len(df_feat)):
+                dst_ip = df_feat.iloc[idx].get("_daddr", "unknown")
+                
+                # Feature-level metrics
+                if np.isfinite(df_feat.iloc[idx].get("rate", 0)):
+                    PACKET_RATE.labels(dst_ip=dst_ip).set(df_feat.iloc[idx]["rate"])
+                
+                if np.isfinite(df_feat.iloc[idx].get("src_entropy", 0)):
+                    SRC_ENTROPY.labels(dst_ip=dst_ip).set(df_feat.iloc[idx]["src_entropy"])
+                
+                # Prediction-level metrics
+                if y1[idx] == 1:  # Attack
+                    attack_type = str(y2[idx]).lower() if y2[idx] else "unknown"
+                    ddos_variant = str(y3[idx]).lower() if y3[idx] else "unknown"
+                    
+                    ATTACK_WINDOWS.labels(
+                        attack_type=attack_type,
+                        ddos_variant=ddos_variant,
+                        dst_ip=dst_ip
+                    ).inc()
+                    
+                    # Log alerts
+                    if attack_type == "ddos" and ddos_variant:
+                        logger.warning(f"🚨 ALERT: DDoS-{ddos_variant.upper()} detected (dst={dst_ip})")
+                    elif attack_type:
+                        logger.warning(f"🚨 ALERT: {attack_type.upper()} detected (dst={dst_ip})")
+                else:
+                    NORMAL_WINDOWS.labels(dst_ip=dst_ip).inc()
+            
+            logger.info(f"Batch {batch_id} processing complete\n")
+            
+        except KeyboardInterrupt:
+            logger.info("Detector server interrupted by user")
+            break
+        except Exception as e:
+            logger.error(f"Error processing batch: {e}", exc_info=True)
+            continue
+    
+    logger.info("Detector server stopped")
 
 
 # -----------------------
@@ -604,37 +788,66 @@ def main():
     # Auto-detect script directory to handle running from different locations
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    ap = argparse.ArgumentParser(description="DDoS Detection with Two-Stage ML Pipeline")
-    ap.add_argument("--flows-c", default=os.path.join(script_dir, "flows/flows_c.txt"), 
-                    help="Path to flows_c.txt (Argus -c output)")
-    ap.add_argument("--flows-s", default=os.path.join(script_dir, "flows/flows_s.txt"), 
-                    help="Path to flows_s.txt (Argus -s output)")
-    ap.add_argument("--encoders", default=os.path.join(script_dir, "results/models/encoders.pkl"), 
-                    help="Path to encoders.pkl")
-    ap.add_argument("--features", default=os.path.join(script_dir, "results/models/features.pkl"), 
-                    help="Path to features.pkl")
-    ap.add_argument("--mapping", default=os.path.join(script_dir, "results/models/mapping.pkl"), 
-                    help="Path to mapping.pkl")
-    ap.add_argument("--stage1", default=os.path.join(script_dir, "results/models/stage1.pkl"), 
-                    help="Path to stage1.pkl")
-    ap.add_argument("--stage2", default=os.path.join(script_dir, "results/models/stage2.pkl"), 
-                    help="Path to stage2.pkl")
-    ap.add_argument("--stage3", default=os.path.join(script_dir, "results/models/stage3.json"), 
-                    help="Path to stage3.json")
-    ap.add_argument("--label-encoder", default=os.path.join(script_dir, "results/models/label_encoder.pkl"), 
-                    help="Path to label_encoder.pkl for Stage 3")
-    ap.add_argument("--window", type=int, default=WINDOW_SIZE, help=f"Time window size in seconds (default: {WINDOW_SIZE})")
-    ap.add_argument("--limit-c", type=int, default=0, help="Limit lines for flows_c (0 = no limit)")
-    ap.add_argument("--limit-s", type=int, default=0, help="Limit lines for flows_s (0 = no limit)")
-    ap.add_argument("--show", type=int, default=20, help="Show top N results")
-    ap.add_argument("--debug", action="store_true", help="Enable debug logging")
+    ap = argparse.ArgumentParser(
+        description="DDoS Detection with Three-Stage ML Pipeline (PCAP Direct Read)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage:
+  python detector.py --pcap capture.pcap
+  
+  # With packet limit (recommended for large files):
+  python detector.py --pcap merged.pcap --max-packets 500000
+  
+  # With debug output:
+  python detector.py --pcap capture.pcap --max-packets 100000 --debug
+  
+  # Custom window size:
+  python detector.py --pcap capture.pcap --window 60
+        """
+    )
+    
+    # Input source arguments
+    input_group = ap.add_argument_group('Input (required)')
+    input_group.add_argument("--pcap", type=str, required=True,
+                             help="Path to PCAP file (required). Can be single capture or merged file.")
+    input_group.add_argument("--max-packets", type=int, default=0, 
+                             help="Limit packets to read (0 = no limit). "
+                                  "Use to control memory: 100K packets ≈ 20MB, 500K ≈ 100MB, 1M ≈ 200MB RAM")
+    
+    # Model arguments
+    model_group = ap.add_argument_group('Model paths')
+    model_group.add_argument("--encoders", default=os.path.join(script_dir, "results/models/encoders.pkl"), 
+                             help="Path to encoders.pkl")
+    model_group.add_argument("--features", default=os.path.join(script_dir, "results/models/features.pkl"), 
+                             help="Path to features.pkl")
+    model_group.add_argument("--mapping", default=os.path.join(script_dir, "results/models/mapping.pkl"), 
+                             help="Path to mapping.pkl")
+    model_group.add_argument("--stage1", default=os.path.join(script_dir, "results/models/stage1.pkl"), 
+                             help="Path to stage1.pkl")
+    model_group.add_argument("--stage2", default=os.path.join(script_dir, "results/models/stage2.pkl"), 
+                             help="Path to stage2.pkl")
+    model_group.add_argument("--stage3", default=os.path.join(script_dir, "results/models/stage3.json"), 
+                             help="Path to stage3.json")
+    model_group.add_argument("--label-encoder", default=os.path.join(script_dir, "results/models/label_encoder.pkl"), 
+                             help="Path to label_encoder.pkl for Stage 3")
+    
+    # Processing arguments
+    proc_group = ap.add_argument_group('Processing options')
+    proc_group.add_argument("--window", type=int, default=WINDOW_SIZE, 
+                            help=f"Time window size in seconds (default: {WINDOW_SIZE}s, matches training)")
+    proc_group.add_argument("--show", type=int, default=20, 
+                            help="Number of sample results to display (default: 20)")
+    proc_group.add_argument("--debug", action="store_true", 
+                            help="Enable debug logging (shows detailed processing info)")
+    
     args = ap.parse_args()
     
     if args.debug:
         logger.setLevel(logging.DEBUG)
     
     logger.info("="*60)
-    logger.info("DDoS DETECTOR - Two-Stage ML Pipeline")
+    logger.info("DDoS DETECTOR - Three-Stage ML Pipeline")
     logger.info("="*60)
 
     # Load models/assets
@@ -668,26 +881,50 @@ def main():
     logger.debug(f"Feature list ({len(feature_list)} features): {feature_list}")
     logger.debug(f"Attack mapping: {mapping}")
 
-    # Load data
-    limit_c = None if args.limit_c == 0 else args.limit_c
-    limit_s = None if args.limit_s == 0 else args.limit_s
-
-    logger.info(f"Loading flows_c from: {args.flows_c}" + (f" (limit: {limit_c})" if limit_c else ""))
-    events = load_events_from_flows_c(args.flows_c, limit_lines=limit_c)
-    
-    logger.info(f"Loading flows_s from: {args.flows_s}" + (f" (limit: {limit_s})" if limit_s else ""))
-    metas = load_meta_from_flows_s(args.flows_s, limit_lines=limit_s)
-
-    if not events:
-        logger.error("No events parsed from flows_c. Check flows_c format / path.")
+    # Check Scapy availability
+    if not SCAPY_AVAILABLE:
+        logger.error("="*60)
+        logger.error("ERROR: Scapy is not installed!")
+        logger.error("="*60)
+        logger.error("Scapy is required for PCAP parsing.")
+        logger.error("Install with: pip install scapy")
+        logger.error("")
         return
     
-    logger.info(f"Parsed {len(events):,} events from flows_c")
-    logger.info(f"Parsed {len(metas):,} flows from flows_s")
-
-    # Build 22 features
-    logger.info(f"Building 22 features with window_size={args.window}s...")
-    df_feat = build_22_features(events, metas, window_size=args.window)
+    # Load events from PCAP file
+    logger.info("="*60)
+    logger.info("PCAP DIRECT READ MODE")
+    logger.info("="*60)
+    
+    limit_packets = None if args.max_packets == 0 else args.max_packets
+    logger.info(f"Input file: {args.pcap}")
+    if limit_packets:
+        logger.info(f"Packet limit: {limit_packets:,}")
+    else:
+        logger.info("Packet limit: None (reading full file)")
+    
+    try:
+        events, global_t0 = load_events_from_pcap(args.pcap, max_packets=limit_packets)
+    except Exception as e:
+        logger.error(f"Failed to load PCAP file: {e}")
+        return
+    
+    if not events:
+        logger.error("No IP packets found in PCAP file. Check file format.")
+        return
+    
+    # Display PCAP info
+    time_span = events[-1].t_epoch - events[0].t_epoch
+    logger.info(f"")
+    logger.info(f"Parsed {len(events):,} packets from PCAP")
+    logger.info(f"Time range: {events[0].t_epoch:.3f} to {events[-1].t_epoch:.3f}")
+    logger.info(f"Duration: {time_span:.1f}s ({time_span/60:.1f} minutes)")
+    logger.info(f"GLOBAL_T0: {global_t0}")
+    
+    # Build 22 features from PCAP events
+    logger.info(f"")
+    logger.info(f"Building 22 features with {args.window}s time windows...")
+    df_feat = build_22_features(events, window_size=args.window, global_t0=global_t0)
 
     if df_feat.empty:
         logger.error("Feature table empty. Nothing to predict.")
@@ -764,38 +1001,13 @@ def main():
             y3_variants = label_encoder.inverse_transform(y3_pred)
             logger.debug(f"[DEBUG] y3_variants after inverse_transform (first 5): {list(y3_variants[:5])}")
             
-            # Map variant names: keep 'Normal' as 'normal', 'HTTP' → 'http', etc.
-            # All 4 classes from training: Normal, HTTP, TCP, UDP
-            y3_labels = []
-            for variant in y3_variants:
-                variant_str = str(variant).lower()
-                y3_labels.append(variant_str)  # normal, http, tcp, udp
+            # Convert to lowercase for consistency
+            y3_labels = [str(variant).lower() for variant in y3_variants]
             
-            # Apply rule-based fallback for Normal predictions that should be HTTP
-            # Check if Dport indicates HTTP traffic when model predicts Normal
-            fallback_count = 0
-            ddos_indices = np.where(ddos_mask)[0]
-            
-            for i, label in enumerate(y3_labels):
-                if label == 'normal':
-                    # Get original window index
-                    window_idx = ddos_indices[i]
-                    
-                    # Get Dport from the window data
-                    if 'Dport' in df_feat.columns:
-                        dport = df_feat.iloc[window_idx]['Dport']
-                        
-                        # If Dport indicates HTTP, override prediction
-                        if check_if_http_port(dport):
-                            y3_labels[i] = 'http'
-                            fallback_count += 1
-                            logger.debug(f"[FALLBACK] Window {window_idx}: 'normal' → 'http' (Dport={dport})")
-            
-            if fallback_count > 0:
-                logger.info(f"Rule-based fallback applied: {fallback_count} windows corrected from 'normal' to 'http' based on Dport")
-            
+            # Assign predictions to output array
             y3[ddos_mask] = np.array(y3_labels, dtype=object)
-            logger.debug(f"[DEBUG] y3 after assignment (first 5): {list(y3[:5])}")
+            logger.debug(f"[DEBUG] Assigned {len(y3_labels)} Stage 3 predictions")
+            logger.debug(f"[DEBUG] First 5 DDoS predictions: {y3_labels[:5]}")
         else:
             logger.info("Stage 3 skipped: No DDoS attacks detected by Stage 2")
     else:
@@ -847,10 +1059,10 @@ def main():
     print(f"\n[+] Windows analyzed: {len(out):,} (window={args.window}s)")
     print(f"[+] Stage 1 distribution: {dict(Counter(out['stage1_pred'].tolist()))}")
     if attack_mask.any():
-        print(f"[+] Stage 2 distribution: {dict(Counter(out.loc[attack_mask, 'stage2_pred'].tolist()))}")
+        print(f"[+] Stage 2 distribution: {dict(Counter(out[attack_mask]['stage2_pred'].tolist()))}")
         # Show Stage 3 distribution if there are DDoS attacks
         if ddos_mask is not None and ddos_mask.any():
-            print(f"[+] Stage 3 distribution (DDoS variants): {dict(Counter(out.loc[ddos_mask, 'stage3_pred'].tolist()))}")
+            print(f"[+] Stage 3 distribution (DDoS variants): {dict(Counter(out[ddos_mask]['stage3_pred'].tolist()))}")
     else:
         print("[+] Stage 2: No attacks detected")
 
