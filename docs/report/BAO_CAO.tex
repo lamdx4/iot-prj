@@ -268,41 +268,8 @@ Hệ thống phát hiện và phân loại botnet IoT được thiết kế theo
 
 \begin{figure}[H]
     \centering
-    \begin{verbatim}
-Luồng Dữ Liệu Tổng Thể:
-
-Raw Data (74 CSV files, ~16GB)
-         ↓
-[Merge & Batch] → 8 Batches (~2GB each)
-         ↓
-[Feature Engineering] → 22 features
-         ↓
-┌─────────────────────────────────────┐
-│    STAGE 1: Binary Classification   │
-│    (Attack vs Normal)                │
-│    Input: 22 features                │
-│    Output: is_attack (0/1)           │
-│    Model: XGBoost Binary Classifier  │
-└─────────────────────────────────────┘
-         ↓
-   Decision Point
-         ↓
-    ┌────────┴────────┐
-    │                 │
- Normal          Attack
-(Output)            ↓
-         ┌─────────────────────────────────────┐
-         │  STAGE 2: Multi-class Classification│
-         │  (DDoS vs DoS vs Reconnaissance)    │
-         │  Input: 22 features                 │
-         │  Output: attack_type (0/1/2)        │
-         │  Model: XGBoost Multi-class         │
-         └─────────────────────────────────────┘
-                     ↓
-             Final Classification
-         (Normal / DDoS / DoS / Reconnaissance)
-    \end{verbatim}
-    \caption{Sơ đồ luồng dữ liệu của hệ thống Two-Stage Hierarchical Model}
+    \includegraphics[width=0.95\textwidth]{figures/system_overview.png}
+    \caption{Sơ đồ luồng dữ liệu của hệ thống Three-Stage Hierarchical Model}
     \label{fig:architecture}
 \end{figure}
 
@@ -1156,22 +1123,6 @@ Loss giảm nhanh trong 50 iterations đầu tiên và converge ổn định sau
     \end{tabular}
 \end{table}
 
-\section{So sánh với các phương pháp liên quan}
-
-\begin{table}[H]
-    \centering
-    \caption{So sánh với các phương pháp khác}
-    \begin{tabular}{|l|l|l|l|}
-    \hline
-    \textbf{Method} & \textbf{Accuracy} & \textbf{Train Time} & \textbf{Memory} \\ \hline
-    Baseline (No ML) & 89.3\% & - & - \\ \hline
-    Random Forest & 94.2\% & 45 min & 8 GB \\ \hline
-    SVM (RBF) & 91.5\% & 180 min & 16 GB \\ \hline
-    Single XGBoost & 95.8\% & 25 min & 12 GB \\ \hline
-    Deep Learning & 96.5\% & 120 min & 20 GB \\ \hline
-    \textbf{Two-Stage (Ours)} & \textbf{97.19\%} & \textbf{12 min} & \textbf{33 GB} \\ \hline
-    \end{tabular}
-\end{table}
 
 \section{Kết quả phân loại chi tiết các biến thể DDoS}
 
@@ -1352,6 +1303,257 @@ $\rightarrow$ Chỉ lớp HTTP bị ảnh hưởng nhẹ, nhất quán với con
     \item \textbf{Memory Requirement cao}: 33GB RAM.
 \end{enumerate}
 
+\section{DEMO HỆ THỐNG PHÁT HIỆN DDOS}
+
+Hệ thống demo phân tích theo lô (batch replay) các file flow xuất từ Argus.
+
+\subsection{Kiến trúc hệ thống demo}
+
+\subsubsection{Tổng quan kiến trúc}
+Detector (3-stage ML pipeline) \textrightarrow{} Prometheus (time-series storage) \textrightarrow{} Grafana (dashboard). Dữ liệu đầu vào là flow đã ghi sẵn, được replay theo lô.
+
+\subsubsection{Các thành phần hệ thống}
+\begin{itemize}
+    \item \textbf{Detector (host)}: Đọc flow files, chạy 3 stage, export metrics.
+    \item \textbf{Prometheus (container)}: Thu thập/lưu trữ metrics tại \texttt{http://localhost:9090}.
+    \item \textbf{Grafana (container)}: Truy vấn Prometheus, hiển thị dashboard tại \texttt{http://localhost:3000}.
+    \item \textbf{Victim (container)}: Mô phỏng máy đích bị tấn công (phục vụ demo).
+    \item \textbf{Attacker (container)}: Mô phỏng máy tấn công (phục vụ demo).
+\end{itemize}
+
+\subsubsection{Luồng dữ liệu}
+\begin{itemize}
+    \item Input: \texttt{flows\_c.txt}, \texttt{flows\_s.txt} (Argus flows).
+    \item Xử lý: Detector đọc batch, suy luận 3 stage, đẩy metrics sang Prometheus.
+    \item Hiển thị: Grafana truy vấn PromQL và hiển thị kết quả batch gần nhất.
+\end{itemize}
+
+\subsection{Prometheus Metrics Specification}
+
+\subsubsection{Giới thiệu Prometheus}
+Prometheus làm kho time-series cho demo. Metrics được push qua HTTP; dữ liệu lưu kèm labels để truy vấn linh hoạt. Demo là offline replay; mỗi lần chạy lại sẽ cập nhật số liệu mới.
+
+\subsubsection{Metric: ddos\_attack\_windows\_total (Counter)}
+\begin{itemize}
+    \item Labels: \texttt{attack\_type} (dos, ddos, reconnaissance), \texttt{ddos\_variant} (http, tcp, udp, normal), \texttt{dst\_ip}.
+    \item Mục đích: Đếm số cửa sổ tấn công theo loại và biến thể.
+\end{itemize}
+
+\subsubsection{Metric: ddos\_normal\_windows\_total (Counter)}
+\begin{itemize}
+    \item Label: \texttt{dst\_ip}.
+    \item Mục đích: Đếm số cửa sổ traffic bình thường (Stage 1 classify Normal).
+\end{itemize}
+
+\subsubsection{Metric: ddos\_packet\_rate (Gauge)}
+\begin{itemize}
+    \item Unit: packets per second (pps); Label: \texttt{dst\_ip}.
+    \item Ý nghĩa: Cường độ traffic; ngưỡng tham chiếu: <0.5 (Normal), 0.5--2 (DoS), 2--10 (DDoS medium), >10 (DDoS high).
+\end{itemize}
+
+\subsubsection{Metric: ddos\_src\_entropy (Gauge)}
+\begin{itemize}
+    \item Unit: Shannon entropy (0--8); Label: \texttt{dst\_ip}.
+    \item Ý nghĩa: Độ phân tán nguồn; entropy thấp (<1.5) gợi ý DoS/normal, entropy cao (>3) gợi ý DDoS phân tán.
+\end{itemize}
+
+\subsubsection{Ví dụ PromQL}
+\begin{verbatim}
+sum by (attack_type) (ddos_attack_windows_total)
+sum by (ddos_variant) (ddos_attack_windows_total{attack_type="ddos"})
+topk(15, max(ddos_src_entropy) by (dst_ip) > 1)
+avg(ddos_packet_rate) by (dst_ip) > 0.5
+sum(ddos_attack_windows_total)
+\end{verbatim}
+
+\subsection{Grafana Dashboard Configuration}
+
+\subsubsection{Tổng quan Dashboard}
+Dashboard “DDoS Detection Monitoring” hiển thị kết quả batch gần nhất. Auto-refresh chỉ để cập nhật khi có lượt replay mới.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{grafana_sc/Pannel_Overview.png}
+    \caption{Tổng quan dashboard}
+    \label{fig:ddos_dashboard_overview}
+\end{figure}
+
+Nhận xét: Dashboard cung cấp 3 layers thông tin:
+\begin{itemize}
+    \item \textbf{Overview layer} (Stat panels): Traffic Classification Results, Attack Detection Rate
+    \item \textbf{Distribution layer} (Charts): Attack Type Distribution, DDoS Variants Distribution, Attack Classification Breakdown
+    \item \textbf{Technical layer} (Gauges): Source IP Entropy, Packet Rate per IP
+\end{itemize}
+Bố cục này cho phép operator đánh giá nhanh từ tổng quan đến chi tiết sau mỗi lần replay batch.
+
+\subsubsection{Traffic Classification Results (Stat)}
+\begin{verbatim}
+sum(ddos_normal_windows_total)
+sum(ddos_attack_windows_total{attack_type="dos"})
+sum(ddos_attack_windows_total{attack_type="ddos"})
+sum(ddos_attack_windows_total{attack_type="reconnaissance"})
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{grafana_sc/Traffic_Classification_Results.png}
+    \caption{Traffic Classification Results}
+    \label{fig:traffic_classification_results}
+\end{figure}
+Nhận xét: Panel này cung cấp cái nhìn tổng quan nhanh chóng về phân bố traffic. Từ ảnh có thể thấy:
+\begin{itemize}
+    \item DoS chiếm tỷ lệ cao nhất (17,851 windows - màu orange)
+    \item DDoS: 697 windows (màu đỏ)
+    \item Reconnaissance: 270 windows (màu vàng)
+    \item Normal: 627 windows (màu xanh)
+\end{itemize}
+Dataset demo chủ yếu chứa các mẫu tấn công; traffic bình thường chỉ 3.3\%. Stat panel này rất hữu ích để nhanh chóng đánh giá tình hình tổng thể.
+
+\subsubsection{Attack Type Distribution (Bar Chart, Stage 2)}
+\begin{verbatim}
+sum by (attack_type) (ddos_attack_windows_total)
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{grafana_sc/Attack_Type_Distribution_(Stage2).png}
+    \caption{Attack Type Distribution (Stage 2)}
+    \label{fig:attack_type_distribution}
+\end{figure}
+Nhận xét: Bar chart này hiển thị kết quả từ Stage 2 (phân loại loại tấn công). Chiều cao các cột cho thấy sự chênh lệch rõ rệt:
+\begin{itemize}
+    \item DoS (màu vàng): áp đảo tập dữ liệu
+    \item DDoS (màu đỏ): tỷ lệ thấp hơn DoS nhiều lần
+    \item Reconnaissance: tỷ lệ nhỏ nhất
+\end{itemize}
+Màu sắc phân biệt rõ ràng giúp operator nhanh chóng nhận biết loại tấn công chủ đạo. Visualization này là đặc biệt hữu ích để đánh giá attack pattern trong dataset replay.
+
+\subsubsection{DDoS Variants Distribution (Donut, Stage 3)}
+\begin{verbatim}
+sum by (ddos_variant) (ddos_attack_windows_total{attack_type="ddos"})
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{grafana_sc/DDoS_Variants_Distribution_(Stage3).png}
+    \caption{DDoS Variants Distribution (Stage 3)}
+    \label{fig:ddos_variants_distribution}
+\end{figure}
+Nhận xét: Donut chart thể hiện phân bố các biến thể DDoS từ Stage 3. Từ ảnh có thể thấy:
+\begin{itemize}
+    \item TCP: ~32.1\% (tỷ lệ cao nhất)
+    \item Normal (unclassified): ~30.4\% (các flow không phân loại được)
+    \item UDP: ~19.1\%
+    \item HTTP: ~18.4\%
+\end{itemize}
+Tỷ lệ Normal cao là do model Stage 3 được train trên Bot-IoT CSV (có port info rõ ràng) nhưng inference trên Argus aggregated flows (port info bị mở). Donut chart visualization giúp dễ dàng so sánh tỷ lệ giữa các variants.
+
+\subsubsection{Packet Rate per Destination IP (Bar Gauge)}
+\begin{verbatim}
+avg(ddos_packet_rate) by (dst_ip) > 0.5
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{grafana_sc/Packet_Rate_per_Destination_IP.png}
+    \caption{Packet Rate per Destination IP}
+    \label{fig:packet_rate_per_dst}
+\end{figure}
+Nhận xét: Bar gauge này hiển thị cường độ tấn công theo từng destination IP với gradient color từ xanh → vàng → cam → đỏ. Thresholds:
+\begin{itemize}
+    \item Green (<0.5 pps): Normal traffic
+    \item Yellow (0.5--2 pps): DoS attack
+    \item Orange (2--10 pps): DDoS medium intensity
+    \item Red (>10 pps): DDoS high intensity
+\end{itemize}
+Từ ảnh có thể thấy hầu hết IPs có packet rate ở mức yellow-orange (0.5--10 pps), cho thấy có cả DoS và DDoS attacks. Một số IPs đạt mức orange-red (>10 pps) cho thấy tấn công DDoS cường độ cao. Panel này rất hữu ích để xác định target IPs đang chịu tấn công mạnh nhất và ưu tiên xử lý.
+
+\subsubsection{Source IP Entropy (Gauge)}
+\begin{verbatim}
+topk(15, max(ddos_src_entropy) by (dst_ip) > 1)
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{grafana_sc/Source_IP_Entropy.png}
+    \caption{Source IP Entropy}
+    \label{fig:source_ip_entropy}
+\end{figure}
+Nhận xét: Gauge này đo độ phân tán của source IPs, là metric quan trọng để phân biệt DDoS vs DoS. Giá trị entropy được đánh giá theo thresholds:
+\begin{itemize}
+    \item Green (<1.5): DoS/Normal - ít nguồn tấn công
+    \item Yellow (1.5--3): DDoS medium scale - độ phân tán trung bình
+    \item Red (>3): DDoS high scale - nhiều nguồn phân tán
+\end{itemize}
+Giá trị entropy cao cho thấy nhiều địa chỉ IP khác nhau tham gia tấn công (đặc trưng của DDoS), trong khi giá trị thấp cho thấy tấn công từ ít nguồn (DoS hoặc normal traffic). Từ ảnh có thể thấy một số destination IPs có entropy ở mức yellow-red (>1.5), xác nhận đây là tấn công phân tán. Panel này bổ sung thông tin quan trọng cho việc phân loại attack type.
+
+\subsubsection{Attack Classification Breakdown (Pie)}
+\begin{verbatim}
+sum(ddos_normal_windows_total)
+sum(ddos_attack_windows_total{attack_type="dos"})
+sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="http"})
+sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="tcp"})
+sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="udp"})
+sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="normal"})
+sum(ddos_attack_windows_total{attack_type="reconnaissance"})
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{grafana_sc/Attack_Classification_Breakdown.png}
+    \caption{Attack Classification Breakdown}
+    \label{fig:attack_classification_breakdown}
+\end{figure}
+Nhận xét: Pie chart này cung cấp phân tích chi tiết nhất với 7 categories, kết hợp cả 3 stages. Từ ảnh có thể thấy:
+\begin{itemize}
+    \item DoS (màu xám): chiếm phần lớn diện tích (~93\%)
+    \item DDoS HTTP (màu đỏ): khoảng 18.4\%
+    \item DDoS TCP (màu light-blue): khoảng 32.1\%
+    \item DDoS UDP (màu vàng): khoảng 19.1\%
+    \item DDoS Normal (màu dark-gray): khoảng 30.4\% (unclassified)
+    \item Reconnaissance (màu light-orange): khoảng 1.4\%
+    \item Normal (màu light-purple): khoảng 3.3\%
+\end{itemize}
+Màu sắc phân biệt rõ ràng giữa các loại tấn công. Sự phân bố này giúp đánh giá tổng thể về composition của traffic trong dataset và cho thấy effectiveness của cả 3-stage pipeline.
+
+\subsubsection{Attack Detection Rate (Stat, Stage 1)}
+\begin{verbatim}
+sum(ddos_attack_windows_total)
+\end{verbatim}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{grafana_sc/Attack_Detection_Rate_(Stage1).png}
+    \caption{Attack Detection Rate (Stage 1)}
+    \label{fig:attack_detection_rate}
+\end{figure}
+Nhận xét: Panel này hiển thị KPI quan trọng nhất - tổng số cửa sổ tấn công mà Stage 1 phát hiện được. Từ ảnh có thể thấy con số 18,818 attack windows (trong tổng ~19,174 windows), cho thấy khả năng phát hiện rất tốt của Stage 1 binary classifier với detection rate ~98\%. Chỉ có 627 windows được classify là Normal (~3.3\%). Đây là metric đầu tiên mà operator cần xem để đánh giá tổng thể tình hình tấn công trong dataset replay.
+
+\subsubsection{Tổng kết về Dashboard}
+\begin{itemize}
+    \item Ba lớp thông tin: (1) Overview Stat; (2) Distribution Charts; (3) Technical Gauges.
+    \item Màu hoá: xanh/vàng/cam/đỏ giúp ưu tiên xử lý nhanh.
+    \item Phù hợp quy trình batch: sau mỗi lượt replay, dashboard hiển thị ngay kết quả mới nhất.
+\end{itemize}
+
+\subsection{Phân tích và đánh giá}
+
+\subsubsection{Hiệu quả giám sát (batch/near real-time khi chạy lặp)}
+\begin{itemize}
+    \item Quan sát kết quả ngay sau mỗi lượt replay batch; auto-refresh chỉ cập nhật số liệu batch mới.
+    \item Lập lịch chạy định kỳ giúp tiệm cận near real-time ở mức vận hành thực tế.
+    \item Entropy và packet rate hỗ trợ ưu tiên xử lý các mục tiêu bị tấn công nặng.
+\end{itemize}
+
+\subsubsection{Ưu điểm kiến trúc 3-stage + Prometheus/Grafana}
+\begin{itemize}
+    \item 3-stage: Stage 1 (Attack vs Normal), Stage 2 (DoS/DDoS/Recon), Stage 3 (HTTP/TCP/UDP cho DDoS).
+    \item Prometheus: lưu trữ time-series hiệu quả, truy vấn linh hoạt bằng PromQL.
+    \item Grafana: trực quan hoá đa dạng; dễ mở rộng thêm panels/metrics mới.
+    \item Kiến trúc tách rời: Detector, Prometheus, Grafana độc lập, dễ thay thế/mở rộng.
+\end{itemize}
+
+\subsubsection{Nhận xét về kết quả demo}
+\begin{itemize}
+    \item Tổng \~19{,}174 windows: DoS 17{,}851 (93\%), DDoS 697 (3.6\%), Normal 627 (3.3\%), Recon 270 (1.4\%).
+    \item Entropy: >3 thường gắn với DDoS; <1.5 gắn với DoS/normal.
+    \item Packet rate: DoS 0.5--2 pps; DDoS >2 pps, nhiều trường hợp >10 pps.
+    \item Stage 1 phát hiện gần 98\% attack windows trong kịch bản replay.
+\end{itemize}
+
 \section{Kết luận chương}
 Chương này trình bày kết quả thực nghiệm của hai hướng nghiên cứu chính:
 
@@ -1364,185 +1566,88 @@ Cả hai mô hình đều chứng minh tính khả thi triển khai thực tế 
 
 \chapter{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
 
-\section{Tóm tắt kết quả nghiên cứu}
+\section{Tóm tắt kết quả}
 
-Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hiện và phân loại botnet IoT dựa trên mô hình học máy phân cấp hai giai đoạn (Two-Stage Hierarchical Model), đạt được các kết quả đáng chú ý sau:
+Nghiên cứu đã xây dựng thành công hệ thống phát hiện và phân loại botnet IoT với hai mô hình chính:
 
-\subsection{Hiệu năng tổng thể}
-
-Hệ thống đạt \textbf{Overall Accuracy 97.19\%} trên tập dữ liệu Bot-IoT với 100,000 samples cân bằng, vượt trội so với các phương pháp hiện có:
-
+\textbf{Two-Stage Hierarchical Model} đạt Overall Accuracy \textbf{97.19\%} trên tập dữ liệu Bot-IoT với 100,000 samples cân bằng:
 \begin{itemize}
-    \item Random Forest: 94.2\% (+3\%)
-    \item SVM với RBF kernel: 91.5\% (+5.7\%)
-    \item Single-stage XGBoost: 95.8\% (+1.4\%)
-    \item Deep Learning CNN-LSTM: 96.5\% (+0.7\%)
+    \item Stage 1 (Binary): Accuracy 99.26\%, ROC-AUC 99.99\%
+    \item Stage 2 (Multi-class): Accuracy 97.58\%, F1-score weighted 97.64\%
+    \item Training time: 12 phút (GPU T4)
 \end{itemize}
 
-\textbf{Stage 1 (Binary Classification)} đạt accuracy 99.26\% và ROC-AUC 99.99\%, cho thấy khả năng phân biệt lưu lượng tấn công và bình thường gần như hoàn hảo. \textbf{Stage 2 (Multi-class Classification)} đạt accuracy 97.58\% trên các loại tấn công, với F1-score weighted 97.64\%.
-
-\subsection{Hiệu năng theo từng loại tấn công}
-
-Hệ thống thể hiện khả năng phát hiện xuất sắc trên hầu hết các loại tấn công:
-
+\textbf{DDoS Variants Classification} đạt Accuracy \textbf{99.92\%} trên bài toán phân loại chi tiết các biến thể DDoS:
 \begin{itemize}
-    \item \textbf{Normal}: Recall 99.95\% (chỉ bỏ sót 1/2,000 samples)
-    \item \textbf{DoS}: Recall 99.36\%, Precision 99.84\% (hiệu năng tốt nhất)
-    \item \textbf{Reconnaissance}: Recall 99.12\%, Precision 86.74\%
-    \item \textbf{DDoS}: Recall 93.22\%, Precision 99.95\% (điểm yếu cần cải thiện)
+    \item Phân loại chính xác HTTP, TCP, UDP với F1-score gần 100\%
+    \item Training time < 2 phút trên CPU, phù hợp resource-constrained environments
 \end{itemize}
 
-\subsection{Hiệu năng tính toán}
 
-Hệ thống đạt được hiệu năng tính toán ấn tượng, phù hợp cho triển khai thực tế:
+\section{Đóng góp chính}
 
+\textbf{1. Kiến trúc Three-Stage Hierarchical Model}
+
+Đề xuất kiến trúc phân cấp ba giai đoạn: Binary Classification → Multi-class Attack Type → DDoS Variant Classification. Kiến trúc này cho phép tối ưu hóa riêng biệt cho từng bài toán con.
+
+\textbf{2. Source Diversity Features}
+
+Thiết kế 3 đặc trưng mới (\texttt{unique\_src\_count}, \texttt{src\_entropy}, \texttt{top\_src\_ratio}) giúp phân biệt hiệu quả DDoS (nhiều nguồn) và DoS (ít nguồn).
+
+\textbf{3. Random Consecutive Sampling}
+
+Phương pháp cân bằng dữ liệu mới thay thế SMOTE cho DDoS variants, bảo toàn temporal patterns và tránh synthetic artifacts. Đạt perfect class balance 25\% mỗi class.
+
+\textbf{4. Balanced Test Set và Evaluation Framework}
+
+Xây dựng balanced test set 100K samples với distribution thực tế (DoS 50\%, DDoS 35\%, Recon 13\%, Normal 2\%) để đánh giá công bằng hiệu năng model.
+
+\section{Hạn chế}
+
+\textbf{Về hiệu năng:}
 \begin{itemize}
-    \item \textbf{Training time}: 12 phút (với GPU T4) vs 4 giờ (CPU only) - tăng tốc 20x.
-    \item \textbf{Inference throughput}: 1.2 triệu samples/giây.
-    \item \textbf{Latency}: 0.82 microseconds/sample.
-    \item \textbf{Model size}: 8.4 MB (compact, dễ deploy).
-    \item \textbf{RAM inference}: \textasciitilde1 GB (thấp, phù hợp edge devices).
+    \item DDoS recall (93.22\%) thấp hơn so với DoS và Reconnaissance (99\%+), do sự tương đồng giữa low-rate DDoS và Normal traffic
+    \item Theft category bị loại bỏ do chỉ có 1,587 samples (0.003\%)
 \end{itemize}
 
-Khả năng xử lý này cho phép hệ thống scale lên 121,000 IoT devices với single instance, vượt xa yêu cầu thực tế.
-
-\section{Đóng góp chính của nghiên cứu}
-
-\subsection{Đóng góp về mô hình}
-
-\textbf{Kiến trúc Two-Stage Hierarchical Model}
-
-Nghiên cứu đề xuất kiến trúc phân cấp hai giai đoạn, trong đó:
+\textbf{Về tài nguyên:}
 \begin{itemize}
-    \item \textbf{Stage 1} tập trung vào binary classification (Attack vs Normal) để lọc ra lưu lượng bình thường.
-    \item \textbf{Stage 2} chuyên sâu vào multi-class classification (DDoS vs DoS vs Reconnaissance) chỉ trên các samples được xác định là tấn công.
-\end{itemize}
-Kiến trúc này cho phép tối ưu hóa riêng biệt cho từng bài toán con, khai thác đặc thù của từng giai đoạn, và đạt accuracy cao hơn 1.4\% so với single-stage XGBoost.
-
-\textbf{Tích hợp XGBoost với GPU Acceleration}
-
-Sử dụng XGBoost 3.x với \texttt{tree\_method='hist'} và \texttt{device='cuda'} để tận dụng tối đa GPU, đạt training time chỉ 12 phút so với 4 giờ khi sử dụng CPU, cho phép rapid experimentation và dễ dàng retrain model khi có dữ liệu mới.
-
-\subsection{Đóng góp về đặc trưng}
-
-\textbf{Source Diversity Features}
-
-Nghiên cứu thiết kế 3 đặc trưng mới dựa trên phân tích đặc tính nguồn tấn công:
-\begin{enumerate}
-    \item \texttt{unique\_src\_count}: Số lượng địa chỉ IP nguồn duy nhất trong time window.
-    \item \texttt{src\_entropy}: Entropy của phân phối địa chỉ nguồn (Shannon entropy).
-    \item \texttt{top\_src\_ratio}: Tỷ lệ của địa chỉ nguồn xuất hiện nhiều nhất.
-\end{enumerate}
-
-Các features này giúp phân biệt hiệu quả giữa DDoS attacks (nhiều nguồn) và DoS attacks (ít nguồn). Ablation study chứng minh đóng góp đáng kể: bỏ source diversity features làm DDoS recall giảm 4.72\% (từ 93.22\% xuống 88.5\%).
-
-\subsection{Đóng góp về xử lý mất cân bằng dữ liệu}
-
-\textbf{Extreme Imbalance Handling (2000:1)}
-
-Nghiên cứu áp dụng kết hợp hai kỹ thuật:
-\begin{itemize}
-    \item \textbf{SMOTE}: Tạo synthetic samples cho lớp thiểu số (Normal, Reconnaissance), tăng số lượng từ 7,769 lên \textasciitilde2 triệu samples.
-    \item \textbf{scale\_pos\_weight}: Cân bằng trọng số trong hàm loss để tăng ảnh hưởng của lớp thiểu số.
+    \item Training cần 33GB RAM, yêu cầu cloud instances với High-RAM
+    \item Chưa tối ưu cho edge devices với RAM hạn chế
 \end{itemize}
 
-Kết quả: Normal recall đạt 99.95\% và Reconnaissance recall đạt 99.12\% dù chỉ chiếm 9\% training data.
-
-\subsection{Đóng góp về phân loại chi tiết DDoS variants}
-
-\textbf{Random Consecutive Sampling Method}
-
-Nghiên cứu đề xuất phương pháp Random Consecutive Sampling thay thế SMOTE cho bài toán phân loại chi tiết các biến thể DDoS (HTTP, TCP, UDP):
+\textbf{Về validation:}
 \begin{itemize}
-    \item \textbf{Bảo toàn temporal patterns}: Lấy các cụm flows liên tiếp thay vì random sampling, giữ nguyên đặc tính tấn công theo thời gian
-    \item \textbf{Tránh synthetic artifacts}: Không tạo dữ liệu giả như SMOTE, giữ nguyên distribution thực tế
-    \item \textbf{Perfect class balance}: Đạt phân phối đều 25\% cho mỗi class (Normal, HTTP, TCP, UDP)
+    \item Chỉ validate trên Bot-IoT dataset (lab environment)
+    \item Chưa test trên real-world traffic và các datasets khác (CICIDS, NSL-KDD)
 \end{itemize}
 
-\textbf{Feature Selection cho DDoS Variants}
+\section{Hướng phát triển}
 
-Lựa chọn 16 best features từ 35 features ban đầu, tập trung vào:
+\textbf{Cải thiện model:}
 \begin{itemize}
-    \item \textbf{Flow metrics} (pkts, bytes, dur): Phân biệt volume-based attacks
-    \item \textbf{Statistical features} (mean, stddev, sum): Capture attack patterns
-    \item \textbf{Directional metrics} (spkts/dpkts, sbytes/dbytes): Phát hiện traffic asymmetry
-    \item \textbf{Rate features} (rate, srate, drate): Distinguish high-volume UDP floods vs HTTP floods
+    \item Temporal Feature Engineering: Thêm time-series features (flow rate, inter-arrival time)
+    \item Ensemble với Deep Learning: Kết hợp XGBoost với CNN-LSTM
+    \item Adversarial robustness và Explainable AI (SHAP, LIME)
 \end{itemize}
 
-\textbf{Hiệu năng đạt được}
-
-Mô hình XGBoost Multi-class đạt \textbf{99.92\% accuracy} trên test set với 30,538 samples cân bằng:
+\textbf{Triển khai thực tế:}
 \begin{itemize}
-    \item \textbf{Normal}: Precision 99.69\%, Recall 100\%, F1-Score 99.84\%
-    \item \textbf{HTTP}: Precision 100\%, Recall 99.69\%, F1-Score 99.84\%
-    \item \textbf{TCP}: Precision 100\%, Recall 100\%, F1-Score 100\%
-    \item \textbf{UDP}: Precision 100\%, Recall 100\%, F1-Score 100\%
+    \item REST API với Flask/FastAPI cho real-time detection
+    \item Edge deployment trên IoT gateway (Raspberry Pi, NVIDIA Jetson)
+    \item Integration với SIEM systems và SOC workflows
 \end{itemize}
 
-Kết quả cho thấy khả năng phân loại chính xác các biến thể DDoS, với chỉ 6 misclassifications trong 3,815 test samples (0.16\% error rate).
-
-\subsection{Đóng góp về quy trình và triển khai}
-
-\textbf{Scalable Data Processing Pipeline}
-
-Thiết kế quy trình xử lý hiệu quả cho Big Data (74 files CSV, 16GB, 40-50M records) với batch merging strategy, balanced test set creation và memory optimization.
-
-\textbf{Production-Ready Architecture}
-
-Hệ thống được thiết kế với các đặc điểm phù hợp triển khai thực tế như model size nhỏ gọn (8.4 MB) và throughput cao (1.2M samples/sec).
-
-\section{Hạn chế và tồn tại}
-
-\subsection{Hạn chế về hiệu năng}
-
-\textbf{DDoS Detection Performance}: Mặc dù Overall Accuracy đạt 97.19\%, DDoS recall chỉ đạt 93.22\%, thấp hơn so với các loại tấn công khác. Nguyên nhân là do một số "low-rate DDoS" giống Normal traffic và sự khó phân biệt giữa DDoS và Reconnaissance.
-
-\textbf{Theft Category bị loại bỏ}: Loại tấn công Theft chỉ có 1,587 samples (0.003\%), quá ít để huấn luyện model hiệu quả.
-
-\subsection{Hạn chế về tài nguyên}
-
-\textbf{Memory Requirement cao}: Training cần 33GB RAM, yêu cầu cloud instances với High-RAM, không phù hợp với consumer laptops.
-
-\subsection{Hạn chế về triển khai}
-
-Chưa có Real-time Deployment và chưa validate trên datasets khác ngoài Bot-IoT.
-
-\section{Hướng phát triển tương lai}
-
-\subsection{Cải thiện DDoS Detection}
-
+\textbf{Mở rộng nghiên cứu:}
 \begin{itemize}
-    \item \textbf{Temporal Feature Engineering}: Thêm time-series features (flow rate, inter-arrival time stats).
-    \item \textbf{Ensemble với Deep Learning}: Kết hợp XGBoost với CNN-LSTM để leverage cả statistical và temporal patterns.
+    \item Cross-dataset validation (CICIDS, NSL-KDD, UNSW-NB15)
+    \item Online learning để adapt với new attack patterns
+    \item Model compression (quantization, pruning) cho deployment nhẹ hơn
 \end{itemize}
-
-\subsection{Real-time Deployment}
-
-\begin{itemize}
-    \item \textbf{API Development}: Xây dựng REST API với Flask hoặc FastAPI.
-    \item \textbf{Edge Deployment}: Deploy model trên IoT gateway devices (Raspberry Pi, NVIDIA Jetson).
-    \item \textbf{Monitoring và Alerting}: Implement real-time monitoring system.
-\end{itemize}
-
-\subsection{Mở rộng Dataset và Cross-validation}
-
-Thu thập thêm dữ liệu Theft, validate trên các datasets khác (CICIDS, NSL-KDD), và implement online learning.
-
-\subsection{Tối ưu hóa Resource}
-
-Model compression (quantization, pruning), incremental learning để giảm RAM training, và feature selection để giảm số lượng features.
 
 \section{Kết luận}
 
-\section{Kết luận}
-
-Nghiên cứu đã thành công trong việc xây dựng hệ thống phát hiện và phân loại botnet IoT với hai hướng tiếp cận:
-
-\textbf{Two-Stage Hierarchical Model} đạt Overall Accuracy 97.19\% trên bài toán multi-class classification (Normal, DDoS, DoS, Reconnaissance), vượt trội so với các phương pháp hiện tại. Các đóng góp chính bao gồm kiến trúc phân cấp hai giai đoạn, Source Diversity Features, xử lý extreme imbalance với SMOTE, GPU acceleration, và scalable pipeline.
-
-\textbf{DDoS Variants Classification} đạt 99.92\% accuracy trên bài toán phân loại chi tiết các biến thể DDoS (HTTP, TCP, UDP), chứng minh hiệu quả của Random Consecutive Sampling và feature selection với 16 best features. Mô hình đạt F1-score gần 100\% cho tất cả các classes với training time < 2 phút trên CPU, phù hợp cho resource-constrained environments.
-
-Cả hai hướng nghiên cứu đã đặt nền móng vững chắc cho phát triển giải pháp toàn diện bảo mật IoT, với khả năng triển khai thực tế cao và các hướng phát triển rõ ràng cho tương lai.
+Nghiên cứu đã đạt được các mục tiêu đề ra: xây dựng hệ thống IDS hiệu quả cho IoT với accuracy >97\%, training time <15 phút, và khả năng phân loại chi tiết các biến thể DDoS đạt 99.92\%. Các đóng góp chính bao gồm kiến trúc Three-Stage, Source Diversity Features, và Random Consecutive Sampling. Kết quả nghiên cứu đặt nền móng vững chắc cho phát triển giải pháp bảo mật IoT toàn diện với khả năng triển khai thực tế cao.
 
 \addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
 \begin{thebibliography}{99}
