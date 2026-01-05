@@ -1,10 +1,10 @@
 \relax 
-\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\providecommand\babel@aux[2]{}
 \@nameuse{bbl@beforestart}
 \catcode `"\active 
 \providecommand\hyper@newdestlabel[2]{}
-\providecommand*\HyPL@Entry[1]{}
-\HyPL@Entry{0<</S/D>>}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
 \babel@aux{vietnamese}{}
 \citation{ref17}
 \citation{ref18}
@@ -94,15 +94,15 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5.2}Dataset và phương pháp cân bằng}{20}{subsection.2.5.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{Hạn chế của SMOTE trong bài toán DDoS IoT}{20}{subsection.2.5.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{Random Consecutive Sampling}{21}{subsection.2.5.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {2.1}{\ignorespaces Phân phối cân bằng theo subcategory}}{21}{table.2.1}\protected@file@percent }
-\newlabel{tab:ddos_distribution}{{2.1}{21}{Phân phối cân bằng theo subcategory}{table.2.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2.1}{\ignorespaces Phân phối cân bằng các biến thể DDoS}}{21}{table.2.1}\protected@file@percent }
+\newlabel{tab:ddos_distribution}{{2.1}{21}{Phân phối cân bằng các biến thể DDoS}{table.2.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5.3}Kiến trúc mô hình phân loại đa lớp}{22}{subsection.2.5.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5.4}Lựa chọn đặc trưng -- 16 Best Features}{22}{subsection.2.5.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{(1) Basic flow metrics (4 features)}{22}{subsection.2.5.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{(2) Statistical aggregations (5 features)}{22}{subsection.2.5.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{(3) Directional metrics (4 features)}{22}{subsection.2.5.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{(4) Rate-based features (3 features)}{22}{subsection.2.5.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Lý do loại bỏ các nhóm feature khác}{22}{subsection.2.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Lý do loại bỏ các nhóm feature khác}{23}{subsection.2.5.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5.5}Siêu tham số}{23}{subsection.2.5.5}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {2.2}{\ignorespaces Cấu hình XGBoost DDoS Classifier}}{23}{table.2.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5.6}Quy trình huấn luyện}{23}{subsection.2.5.6}\protected@file@percent }
@@ -148,8 +148,8 @@
 \@writefile{lot}{\contentsline {table}{\numberline {3.11}{\ignorespaces Hiệu năng tính toán}}{32}{table.3.11}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {3.4}Kết quả phân loại chi tiết các biến thể DDoS}{32}{section.3.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4.1}Phân bố các lớp sau khi cân bằng}{32}{subsection.3.4.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3.6}{\ignorespaces Phân bố các lớp sau Random Consecutive Sampling}}{32}{figure.3.6}\protected@file@percent }
-\newlabel{fig:ddos_class_distribution}{{3.6}{32}{Phân bố các lớp sau Random Consecutive Sampling}{figure.3.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.6}{\ignorespaces Phân bố các biến thể DDoS sau Random Consecutive Sampling}}{32}{figure.3.6}\protected@file@percent }
+\newlabel{fig:ddos_class_distribution}{{3.6}{32}{Phân bố các biến thể DDoS sau Random Consecutive Sampling}{figure.3.6}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4.2}Phân tích tương quan giữa 16 đặc trưng}{33}{subsection.3.4.2}\protected@file@percent }
 \@writefile{lof}{\contentsline {figure}{\numberline {3.7}{\ignorespaces Feature Correlation Matrix của 16 đặc trưng}}{33}{figure.3.7}\protected@file@percent }
 \newlabel{fig:ddos_correlation_matrix}{{3.7}{33}{Feature Correlation Matrix của 16 đặc trưng}{figure.3.7}{}}
@@ -160,8 +160,8 @@
 \@writefile{lof}{\contentsline {figure}{\numberline {3.9}{\ignorespaces Overall Model Performance Metrics}}{35}{figure.3.9}\protected@file@percent }
 \newlabel{fig:ddos_overall_metrics}{{3.9}{35}{Overall Model Performance Metrics}{figure.3.9}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4.5}Ma trận nhầm lẫn (Confusion Matrix)}{36}{subsection.3.4.5}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3.10}{\ignorespaces Confusion Matrix for Multiclass Classification}}{36}{figure.3.10}\protected@file@percent }
-\newlabel{fig:ddos_confusion_matrix}{{3.10}{36}{Confusion Matrix for Multiclass Classification}{figure.3.10}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.10}{\ignorespaces Confusion Matrix for DDoS Variants Classification}}{36}{figure.3.10}\protected@file@percent }
+\newlabel{fig:ddos_confusion_matrix}{{3.10}{36}{Confusion Matrix for DDoS Variants Classification}{figure.3.10}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4.6}Hiệu năng theo từng lớp}{37}{subsection.3.4.6}\protected@file@percent }
 \@writefile{lof}{\contentsline {figure}{\numberline {3.11}{\ignorespaces Per-Class Performance Metrics}}{37}{figure.3.11}\protected@file@percent }
 \newlabel{fig:ddos_per_class_metrics}{{3.11}{37}{Per-Class Performance Metrics}{figure.3.11}{}}

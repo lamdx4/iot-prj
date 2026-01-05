@@ -54,7 +54,7 @@
 \contentsline {subsubsection}{(2) Statistical aggregations (5 features)}{22}{subsection.2.5.4}%
 \contentsline {subsubsection}{(3) Directional metrics (4 features)}{22}{subsection.2.5.4}%
 \contentsline {subsubsection}{(4) Rate-based features (3 features)}{22}{subsection.2.5.4}%
-\contentsline {subsubsection}{Lý do loại bỏ các nhóm feature khác}{22}{subsection.2.5.4}%
+\contentsline {subsubsection}{Lý do loại bỏ các nhóm feature khác}{23}{subsection.2.5.4}%
 \contentsline {subsection}{\numberline {2.5.5}Siêu tham số}{23}{subsection.2.5.5}%
 \contentsline {subsection}{\numberline {2.5.6}Quy trình huấn luyện}{23}{subsection.2.5.6}%
 \contentsline {section}{\numberline {2.6}Phân tích độ phức tạp và đánh giá tối ưu hóa}{23}{section.2.6}%
