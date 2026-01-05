@@ -100,14 +100,54 @@ def shannon_entropy_from_counts(counts: Iterable[int]) -> float:
 
 @dataclass
 class EventC:
-    t_epoch: float
-    saddr: str
-    daddr: str
-    proto: str
-    bytes: int = 0  # Packet size in bytes
+    """Single packet/event record - minimal memory footprint"""
+    t_epoch: float  # Timestamp (seconds since epoch)
+    saddr: str      # Source IP
+    daddr: str      # Destination IP
+    proto: str      # Protocol: 'tcp', 'udp', 'icmp'
+    bytes: int      # Packet size in bytes
     sport: int = 0  # Source port
-    dport: int = 0  # Destination port (critical for HTTP detection)
+    dport: int = 0  # Destination port
     tcp_flags: int = 0  # TCP flags bitmask (0x02=SYN, 0x10=ACK, 0x01=FIN, 0x04=RST, etc.)
+
+
+def tcp_flags_to_argus(flags: int) -> str:
+    """
+    Convert TCP flags bitmask to Argus-style format matching Bot-IoT dataset.
+    Dataset flags: ['e' 'e    F' 'e   t' 'e  D' 'e &' 'e *' 'e d' 'e dD' 'e dS' 'e g' 'e r' 'e s' 'eU']
+    
+    Argus format starts with 'e' (established/ECN) then adds modifiers:
+    - s = SYN
+    - d = data (ACK with payload implied)
+    - r = RST
+    - F = FIN
+    - etc.
+    """
+    if flags == 0:
+        return "e"  # Default
+    
+    # Start with 'e' base
+    result = "e"
+    
+    # Check flags (most common patterns in Bot-IoT)
+    if flags & 0x02:  # SYN
+        result = "e s"
+    elif flags & 0x04:  # RST
+        result = "e r"
+    elif flags & 0x01:  # FIN with ACK
+        result = "e    F"
+    elif flags & 0x10:  # ACK (implies data)
+        result = "e d"
+    
+    # Common combinations
+    if (flags & 0x12) == 0x12:  # SYN+ACK
+        result = "e dS"
+    elif (flags & 0x11) == 0x11:  # FIN+ACK
+        result = "e    F"
+    elif (flags & 0x14) == 0x14:  # RST+ACK
+        result = "e r"
+    
+    return result
 
 
 # -----------------------
@@ -130,7 +170,7 @@ def scapy_packets_to_events(packets: List, global_t0: Optional[float] = None) ->
     
     events: List[EventC] = []
     
-    logger.info(f"Converting {len(packets)} Scapy packets to EventC format")
+    # logger.info(f"Converting {len(packets)} Scapy packets to EventC format")
     
     skipped_count = 0
     
@@ -154,6 +194,11 @@ def scapy_packets_to_events(packets: List, global_t0: Optional[float] = None) ->
             saddr = ip.src
             daddr = ip.dst
             pkt_bytes = len(pkt)
+            
+            # DEMO FIX: Skip victim response packets (outbound to spoofed IPs)
+            # Keep only: inbound attacks + loopback traffic
+            if saddr == "127.0.0.1" and daddr != "127.0.0.1":
+                continue  # Skip responses to spoofed IPs
             
             # Protocol detection
             sport = 0
@@ -192,10 +237,10 @@ def scapy_packets_to_events(packets: List, global_t0: Optional[float] = None) ->
             skipped_count += 1
             continue
     
-    logger.info(f"Conversion complete:")
-    logger.info(f"  Valid IP events: {len(events):,}")
-    logger.info(f"  Skipped (non-IP): {skipped_count:,}")
-    logger.info(f"  GLOBAL_T0: {global_t0}")
+    # logger.info(f"Conversion complete:")
+    # logger.info(f"  Valid IP events: {len(events):,}")
+    # logger.info(f"  Skipped (non-IP): {skipped_count:,}")
+    # logger.info(f"  GLOBAL_T0: {global_t0}")
     
     if not events:
         logger.warning("No valid IP packets found!")
@@ -206,117 +251,6 @@ def scapy_packets_to_events(packets: List, global_t0: Optional[float] = None) ->
         logger.warning("No valid packets found, using default T0=0.0")
     
     return events, global_t0
-
-
-# -----------------------
-# PCAP Parsing (Direct Read)
-# -----------------------
-def load_events_from_pcap(
-    path: str, 
-    max_packets: Optional[int] = None
-) -> Tuple[List[EventC], float]:
-    
-    if not SCAPY_AVAILABLE:
-        raise ImportError("Scapy is required for PCAP parsing. Install: pip install scapy")
-    
-    events: List[EventC] = []
-    global_t0 = None
-    
-    logger.info(f"Opening PCAP file: {path}")
-    if max_packets:
-        logger.info(f"  Packet limit: {max_packets:,}")
-    
-    packet_count = 0
-    skipped_count = 0
-    
-    try:
-        with PcapReader(path) as reader:  # type: ignore[misc]
-            for pkt in reader:
-                packet_count += 1
-                
-                # Check limit first (fast path)
-                if max_packets and len(events) >= max_packets:
-                    break
-                
-                # Extract timestamp from PCAP header (exact microsecond precision)
-                t_epoch = float(pkt.time)
-                
-                # Set GLOBAL_T0 from first packet (for consistent time windows)
-                if global_t0 is None:
-                    global_t0 = t_epoch
-                
-                # Fast IP layer check using hasattr (faster than haslayer)
-                try:
-                    ip = pkt.getlayer('IP')
-                    if ip is None:
-                        skipped_count += 1
-                        continue
-                    
-                    saddr = ip.src
-                    daddr = ip.dst
-                    pkt_bytes = len(pkt)
-                    
-                    # Fast protocol detection using getlayer (faster than haslayer)
-                    sport = 0
-                    dport = 0
-                    proto = 'tcp'  # Default to 'tcp' (most common, always in training)
-                    tcp_flags = 0
-                    
-                    tcp = pkt.getlayer('TCP')
-                    if tcp:
-                        proto = 'tcp'
-                        sport = tcp.sport
-                        dport = tcp.dport
-                        tcp_flags = int(tcp.flags)  # Extract TCP flags bitmask
-                    else:
-                        udp = pkt.getlayer('UDP')
-                        if udp:
-                            proto = 'udp'
-                            sport = udp.sport
-                            dport = udp.dport
-                        elif pkt.getlayer('ICMP'):
-                            proto = 'icmp'
-                        # Note: Other protocols (ARP, IPv6, etc.) default to 'tcp' to match training data
-                
-                except (AttributeError, IndexError):
-                    skipped_count += 1
-                    continue
-                
-                # Create event with exact timestamp, bytes, and ports
-                events.append(EventC(
-                    t_epoch=t_epoch,
-                    saddr=saddr,
-                    daddr=daddr,
-                    proto=proto,
-                    bytes=pkt_bytes,
-                    sport=sport,
-                    dport=dport,
-                    tcp_flags=tcp_flags
-                ))
-        
-        logger.info(f"PCAP parsing complete:")
-        logger.info(f"  Total packets read: {packet_count:,}")
-        logger.info(f"  Valid IP events: {len(events):,}")
-        logger.info(f"  Skipped (non-IP): {skipped_count:,}")
-        logger.info(f"  GLOBAL_T0: {global_t0}")
-        
-        if not events:
-            logger.warning("No valid IP packets found in PCAP file!")
-        
-        # Ensure global_t0 is always float (fallback to 0.0 if None)
-        if global_t0 is None:
-            global_t0 = 0.0
-            logger.warning("No valid packets found, using default T0=0.0")
-        
-        return events, global_t0
-    
-    except FileNotFoundError:
-        logger.error(f"PCAP file not found: {path}")
-        raise
-    except Exception as e:
-        logger.error(f"Error reading PCAP file: {e}")
-        raise
-
 
 # -----------------------
 # Feature Engineering (22 features)
@@ -332,7 +266,7 @@ def build_22_features(
 
     # Convert events to DataFrame
     df_e = pd.DataFrame([e.__dict__ for e in events])
-    
+
     # Set GLOBAL_T0 for consistent time windows
     if global_t0 is not None:
         t0 = global_t0  # Use provided T0 (for multi-file consistency)
@@ -344,6 +278,12 @@ def build_22_features(
     # Calculate relative time and time windows
     df_e["stime"] = df_e["t_epoch"] - t0  # seconds since T0
     df_e["time_window"] = (df_e["stime"] // float(window_size)).astype(int)
+    
+    # DEBUG: Save raw packets for inspection
+    debug_file = f"/tmp/debug_raw_packets_{int(t0)}.csv"
+    df_e[['saddr', 'daddr', 'proto', 'time_window']].to_csv(debug_file, index=False)
+    print(f"[DEBUG] Saved {len(df_e)} packets to {debug_file}", flush=True)
+    print(f"[DEBUG] Unique sources: {df_e['saddr'].nunique()}, Unique dests: {df_e['daddr'].nunique()}", flush=True)
 
     rows: List[Dict[str, Any]] = []
 
@@ -387,7 +327,6 @@ def build_22_features(
         unique_src_count = int(len(src_counter))
         src_entropy = float(shannon_entropy_from_counts(src_counter.values()))
         top_src_ratio = float(max(src_counter.values()) / pkts) if pkts > 0 else 1.0
-
         # Defaults per your doc: fill NaN with (1, 0.0, 1.0) for (unique, entropy, top_ratio)
         if unique_src_count <= 0:
             unique_src_count = 1
@@ -409,42 +348,37 @@ def build_22_features(
                 if not dport_mode.empty:
                     dport = str(int(dport_mode.iloc[0]))
         
-        # TCP Flags: Aggregate from packets in window
-        flgs = ""
+        # TCP Flags: Use Argus-style format matching Bot-IoT dataset
+        flgs = "e"  # Default
         if proto == "tcp" and "tcp_flags" in g.columns:
-            # Collect unique TCP flags from all packets
-            flag_set = set()
-            for flags in g["tcp_flags"]:
-                if flags > 0:
-                    if flags & 0x02: flag_set.add('S')  # SYN
-                    if flags & 0x10: flag_set.add('A')  # ACK
-                    if flags & 0x01: flag_set.add('F')  # FIN
-                    if flags & 0x04: flag_set.add('R')  # RST
-                    if flags & 0x08: flag_set.add('P')  # PSH
-            # Sort for consistency (e.g., "AFPS")
-            flgs = ''.join(sorted(flag_set)) if flag_set else ""
+            # Use the most common flags pattern in this flow
+            flags_values = g["tcp_flags"].dropna()
+            if len(flags_values) > 0:
+                # Get most common flags value
+                dominant_flags = int(flags_values.mode().iloc[0]) if not flags_values.mode().empty else 0
+                flgs = tcp_flags_to_argus(dominant_flags)
         
-        # State: Approximate from TCP flags + packet pattern
+        # State: Map from TCP flags to Argus state classes matching training data
+        # State classes: ['ACC' 'CLO' 'CON' 'ECO' 'FIN' 'INT' 'MAS' 'NRS' 'PAR' 'REQ' 'RST' 'TST' 'URP']
         state = ""
         if proto == "tcp":
-            # Derive state from flags and bidirectional traffic
-            if 'R' in flgs:
-                state = "RST"  # Reset connection
-            elif 'F' in flgs:
-                state = "FIN"  # Connection finishing
-            elif 'S' in flgs and 'A' not in flgs:
-                state = "REQ"  # SYN only (request without response)
-            elif dpkts > 0:  # Bidirectional traffic
-                state = "CON"  # Established connection (with responses)
-            else:  # Only source packets (typical for attacks)
-                state = "INT"  # Interrupted/one-way (no response from destination)
+            # Check Argus-format flags
+            if "r" in flgs:  # "e r" = RST
+                state = "RST"
+            elif "F" in flgs:  # "e    F" = FIN
+                state = "FIN"
+            elif "s" in flgs and dpkts == 0:  # "e s" without response
+                state = "REQ"  # SYN request without reply
+            elif dpkts > 0:  # Bidirectional
+                state = "CON"  # Established connection
+            else:  # Unidirectional (attack pattern)
+                state = "INT"  # Interrupted/incomplete
         elif proto == "udp":
-            # UDP is connectionless
             state = "CON" if dpkts > 0 else "INT"
         elif proto == "icmp":
             state = "CON" if dpkts > 0 else "INT"
         else:
-            state = "INT"  # Default for other protocols
+            state = "INT"
 
         # TCP sequence number: not available from packet headers without stateful tracking
         # For packet-level analysis, we set to 0 (matches training with aggregated data)
@@ -502,7 +436,7 @@ def build_22_features(
     for col in categorical_cols:
         if col in df_feat.columns:
             df_feat[col] = df_feat[col].fillna("")
-    
+
     return df_feat
 
 
@@ -643,6 +577,8 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
     
     batch_count = 0
     global_t0 = None
+    events_buffer = []  # Cross-batch event buffer
+    last_window_processed = -1
     
     while True:
         try:
@@ -657,7 +593,7 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
             packets = batch_data.get('packets', [])
             packet_count = batch_data.get('packet_count', len(packets))
             
-            logger.info(f"Processing batch {batch_id}: {packet_count} packets")
+            logger.debug(f"Processing batch {batch_id}: {packet_count} packets")
             
             if not packets:
                 logger.warning(f"Batch {batch_id}: Empty packet list")
@@ -669,103 +605,144 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
             # Update global_t0 for time window consistency
             if global_t0 is None:
                 global_t0 = batch_t0
+                logger.info(f"Set GLOBAL_T0: {global_t0}")
             
             if not events:
                 logger.warning(f"Batch {batch_id}: No valid IP packets")
                 continue
             
-            # Extract 22 features (for Stage 1 & 2)
-            logger.debug(f"Extracting 22 features...")
-            df_feat = build_22_features(events, window_size=WINDOW_SIZE, global_t0=global_t0)
-            df_feat.to_csv(f"features_batch_{batch_id}.csv", sep="\t", index=False)
-            if df_feat.empty:
-                logger.warning(f"Batch {batch_id}: Feature extraction failed")
-                continue
+            # Add events to buffer (CROSS-BATCH ACCUMULATION)
+            events_buffer.extend(events)
+            # Log buffer status every 10 batches for readability
+            # if batch_count % 10 == 0:
+            #     logger.info(f"📊 [Batch {batch_count}] Buffer: {len(events_buffer)} events | Window: {current_window if events_buffer else 0}")
             
-            logger.info(f"Extracted features: {len(df_feat)} windows")
-            
-            # Note: build_22_features() already fills missing values
-            
-            # Apply encoders
-            df_feat = apply_label_encoders_unknown_minus_one(df_feat, encoders)
-            
-            # Align features
-            df_feat = align_features(df_feat, feature_list)
-            
-            # Stage 1: Attack vs Normal
-            logger.debug("Running Stage 1 (Attack vs Normal)...")
-            X_feat = df_feat[feature_list].values
-            y1 = stage1.predict(X_feat)
-            
-            attack_mask = (y1 == 1)
-            normal_count = np.sum(~attack_mask)
-            attack_count = np.sum(attack_mask)
-            
-            logger.info(f"Stage 1: Normal={normal_count}, Attack={attack_count}")
-            
-            # Stage 2: Attack type classification
-            y2 = np.full(len(y1), "", dtype=object)
-            if attack_count > 0:
-                logger.debug("Running Stage 2 (Attack Type)...")
-                X_attack = X_feat[attack_mask]
-                y2_pred = stage2.predict(X_attack)
-                y2_mapped = map_predictions(y2_pred, mapping)
-                y2[attack_mask] = y2_mapped
+            # Check if we should process a complete window
+            if events_buffer:
+                # Get latest timestamp
+                latest_time = max(e.t_epoch for e in events_buffer)
+                current_window = int((latest_time - global_t0) // WINDOW_SIZE)
                 
-                # Count attack types
-                attack_types = Counter(y2_mapped)
-                logger.info(f"Stage 2: {dict(attack_types)}")
-            
-            # Stage 3: DDoS variant classification
-            y3 = np.full(len(y1), "", dtype=object)
-            ddos_mask = (y2 == "ddos")
-            
-            if np.any(ddos_mask):
-                logger.debug("Running Stage 3 (DDoS Variants)...")
-                df_feat_stage3 = extract_stage3_features(df_feat)
-                X_ddos = df_feat_stage3.loc[ddos_mask].values
+                # logger.info(f"Current window: {current_window}, Last processed: {last_window_processed}")
                 
-                dmatrix = xgb.DMatrix(X_ddos, feature_names=df_feat_stage3.columns.tolist())
-                y3_pred = stage3.predict(dmatrix)
-                
-                # Map numeric predictions to variant names
-                y3_variants = label_encoder.inverse_transform(y3_pred.astype(int))
-                y3[ddos_mask] = y3_variants
-                
-                variant_counts = Counter(y3_variants)
-                logger.info(f"Stage 3: {dict(variant_counts)}")
-            
-            # Update Prometheus metrics
-            for idx in range(len(df_feat)):
-                dst_ip = df_feat.iloc[idx].get("_daddr", "unknown")
-                
-                # Feature-level metrics
-                if np.isfinite(df_feat.iloc[idx].get("rate", 0)):
-                    PACKET_RATE.labels(dst_ip=dst_ip).set(df_feat.iloc[idx]["rate"])
-                
-                if np.isfinite(df_feat.iloc[idx].get("src_entropy", 0)):
-                    SRC_ENTROPY.labels(dst_ip=dst_ip).set(df_feat.iloc[idx]["src_entropy"])
-                
-                # Prediction-level metrics
-                if y1[idx] == 1:  # Attack
-                    attack_type = str(y2[idx]).lower() if y2[idx] else "unknown"
-                    ddos_variant = str(y3[idx]).lower() if y3[idx] else "unknown"
+                # Process when window completes (moved to NEXT window)
+                if current_window > last_window_processed:
+                    # Process ALL completed windows up to current_window - 1
+                    for window_to_process in range(last_window_processed + 1, current_window):
+                        logger.info(f"⏰ Window {window_to_process} complete! Processing buffered events...")
+                        
+                        # Filter events for this specific window
+                        window_events = [e for e in events_buffer 
+                                       if int((e.t_epoch - global_t0) // WINDOW_SIZE) == window_to_process]
+                        
+                        if not window_events:
+                            logger.warning(f"No events found for window {window_to_process}")
+                            continue
+                        
+                        logger.info(f"Processing {len(window_events)} events for window {window_to_process}")
+                        
+                        # Extract 22 features from window events
+                        df_feat = build_22_features(window_events, window_size=WINDOW_SIZE, global_t0=global_t0)
+                        
+                        if not df_feat.empty:
+                            # Get flows for this completed window
+                            completed_windows = df_feat[df_feat['_time_window'] == window_to_process]
+                            
+                            if not completed_windows.empty:
+                                logger.info(f"Extracted features: {len(completed_windows)} flows in window {window_to_process}")
+                                
+                                # Apply encoders
+                                completed_windows = apply_label_encoders_unknown_minus_one(completed_windows, encoders)
+                                
+                                # Align features
+                                completed_windows = align_features(completed_windows, feature_list)
+                                
+                                completed_windows.to_csv("completed_windows.csv", index=False)
+
+                                # Stage 1: Attack vs Normal
+                                logger.debug("Running Stage 1 (Attack vs Normal)...")
+                                X_feat = completed_windows[feature_list].values
+                                y1 = stage1.predict(X_feat)
+                                
+                                attack_mask = (y1 == 1)
+                                normal_count = np.sum(~attack_mask)
+                                attack_count = np.sum(attack_mask)
+                                
+                                logger.info(f"Stage 1: Normal={normal_count}, Attack={attack_count}")
+                                
+                                # Stage 2: Attack type classification
+                                y2 = np.full(len(y1), "", dtype=object)
+                                if attack_count > 0:
+                                    logger.debug("Running Stage 2 (Attack Type)...")
+                                    X_attack = X_feat[attack_mask]
+                                    y2_pred = stage2.predict(X_attack)
+                                    y2_mapped = map_predictions(y2_pred, mapping)
+                                    y2[attack_mask] = y2_mapped
+                                    
+                                    # Count attack types
+                                    attack_types = Counter(y2_mapped)
+                                    logger.info(f"Stage 2: {dict(attack_types)}")
+                                
+                                # Stage 3: DDoS variant classification
+                                y3 = np.full(len(y1), "", dtype=object)
+                                ddos_mask = np.array([str(x).lower() == "ddos" for x in y2])
+                                
+                                if np.any(ddos_mask):
+                                    logger.debug("Running Stage 3 (DDoS Variants)...")
+                                    df_feat_stage3 = extract_stage3_features(completed_windows)
+                                    X_ddos = df_feat_stage3.loc[ddos_mask].values
+                                    
+                                    dmatrix = xgb.DMatrix(X_ddos, feature_names=df_feat_stage3.columns.tolist())
+                                    y3_pred = stage3.predict(dmatrix)
+                                    
+                                    # Map numeric predictions to variant names
+                                    y3_variants = label_encoder.inverse_transform(y3_pred.astype(int))
+                                    y3[ddos_mask] = y3_variants
+                                    
+                                    variant_counts = Counter(y3_variants)
+                                    logger.info(f"Stage 3: {dict(variant_counts)}")
+                                
+                                # Update Prometheus metrics
+                                for idx in range(len(completed_windows)):
+                                    dst_ip = completed_windows.iloc[idx].get("_daddr", "unknown")
+                                    
+                                    # Feature-level metrics
+                                    if np.isfinite(completed_windows.iloc[idx].get("rate", 0)):
+                                        PACKET_RATE.labels(dst_ip=dst_ip).set(completed_windows.iloc[idx]["rate"])
+                                    
+                                    if np.isfinite(completed_windows.iloc[idx].get("src_entropy", 0)):
+                                        SRC_ENTROPY.labels(dst_ip=dst_ip).set(completed_windows.iloc[idx]["src_entropy"])
+                                    
+                                    # Prediction-level metrics
+                                    if y1[idx] == 1:  # Attack
+                                        attack_type = str(y2[idx]).lower() if y2[idx] else "unknown"
+                                        ddos_variant = str(y3[idx]).lower() if y3[idx] else "unknown"
+                                        
+                                        ATTACK_WINDOWS.labels(
+                                            attack_type=attack_type,
+                                            ddos_variant=ddos_variant,
+                                            dst_ip=dst_ip
+                                        ).inc()
+                                        
+                                        # Log alerts
+                                        if attack_type == "ddos" and ddos_variant:
+                                            logger.warning(f"🚨 ALERT: DDoS-{ddos_variant.upper()} detected (dst={dst_ip})")
+                                        elif attack_type:
+                                            logger.warning(f"🚨 ALERT: {attack_type.upper()} detected (dst={dst_ip})")
+                                    else:
+                                        NORMAL_WINDOWS.labels(dst_ip=dst_ip).inc()
                     
-                    ATTACK_WINDOWS.labels(
-                        attack_type=attack_type,
-                        ddos_variant=ddos_variant,
-                        dst_ip=dst_ip
-                    ).inc()
+                    # Update last processed window to last completed window
+                    last_window_processed = current_window - 1
                     
-                    # Log alerts
-                    if attack_type == "ddos" and ddos_variant:
-                        logger.warning(f"🚨 ALERT: DDoS-{ddos_variant.upper()} detected (dst={dst_ip})")
-                    elif attack_type:
-                        logger.warning(f"🚨 ALERT: {attack_type.upper()} detected (dst={dst_ip})")
+                    # Cleanup old events (keep only last 2 windows for safety)
+                    cutoff_time = global_t0 + (current_window - 1) * WINDOW_SIZE
+                    events_buffer = [e for e in events_buffer if e.t_epoch >= cutoff_time]
+                    # logger.info(f"Cleaned buffer, now {len(events_buffer)} events remain")
                 else:
-                    NORMAL_WINDOWS.labels(dst_ip=dst_ip).inc()
+                    logger.debug(f"Window {current_window} still in progress, accumulating...")
             
-            logger.info(f"Batch {batch_id} processing complete\n")
+            # logger.info(f"Batch {batch_id} added to buffer\n")
             
         except KeyboardInterrupt:
             logger.info("Detector server interrupted by user")

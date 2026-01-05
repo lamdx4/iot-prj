@@ -91,8 +91,8 @@ Note: Requires sudo for packet capture!
     
     parser.add_argument(
         "--interface", "-i",
-        default="eth0",
-        help="Network interface for packet capture (default: eth0)"
+        default="lo",
+        help="Network interface for packet capture (default: lo for loopback testing)"
     )
     parser.add_argument(
         "--models", "-m",
