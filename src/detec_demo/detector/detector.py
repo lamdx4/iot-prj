@@ -46,6 +46,13 @@ except ImportError:
     ICMP = None  # type: ignore[assignment]
 
 
+
+# -----------------------
+# Global Configuration
+# -----------------------
+SERVER_IP = "192.168.1.4"
+WINDOW_SIZE = 30  # Ensure this matches main.py
+
 # -----------------------
 # Prometheus Metrics
 # -----------------------
@@ -195,10 +202,11 @@ def scapy_packets_to_events(packets: List, global_t0: Optional[float] = None) ->
             daddr = ip.dst
             pkt_bytes = len(pkt)
             
-            # DEMO FIX: Skip victim response packets (outbound to spoofed IPs)
-            # Keep only: inbound attacks + loopback traffic
-            if saddr == "127.0.0.1" and daddr != "127.0.0.1":
-                continue  # Skip responses to spoofed IPs
+            # DISABLED: This filter removes bidirectional flow characteristics
+            # needed for Stage 3 to correctly classify TCP vs UDP attacks
+            # Training data uses bidirectional features (dpkts, dbytes)
+            # if saddr == "127.0.0.1" and daddr != "127.0.0.1":
+            #     continue  # Skip responses to spoofed IPs
             
             # Protocol detection
             sport = 0
@@ -286,8 +294,23 @@ def build_22_features(
     print(f"[DEBUG] Unique sources: {df_e['saddr'].nunique()}, Unique dests: {df_e['daddr'].nunique()}", flush=True)
 
     rows: List[Dict[str, Any]] = []
-
-    for (tw, daddr), g in df_e.groupby(["time_window", "daddr"], sort=True):
+    
+    # Group by time_window ONLY (not daddr!) for single-server deployment
+    for tw in df_e["time_window"].unique():
+        window_events = df_e[df_e["time_window"] == tw]
+        
+        # Separate attack vs response packets  
+        # Attack: packets TO server (daddr = server)
+        # Response: packets FROM server (saddr = server)
+        attacks = window_events[window_events["daddr"] == SERVER_IP]
+        responses = window_events[window_events["saddr"] == SERVER_IP]
+        
+        # Skip if no attack packets (only responses = not interesting)
+        if len(attacks) == 0:
+            continue
+        
+        g = window_events  # Process all packets in this window
+        daddr = SERVER_IP  # Always group under server IP
         g = g.sort_values("stime")
         stimes = g["stime"].to_numpy(dtype=float)
 
@@ -312,21 +335,23 @@ def build_22_features(
         dur_span = float(stimes[-1] - stimes[0]) if len(stimes) >= 2 else 0.0
         dur = max(DEFAULT_DUR, dur_span) if dur_span > 0 else DEFAULT_DUR
 
-        # Directional metrics: with sniffed SYN-heavy traffic, dst replies are typically absent
-        spkts = pkts
-        dpkts = 0
-        sbytes = bytes_
-        dbytes = 0
+        # Bidirectional metrics using separated attack/response packets
+        # spkts = attacks TO server, dpkts = responses FROM server
+        spkts = len(attacks)
+        dpkts = len(responses)
+        sbytes = attacks["bytes"].sum() if len(attacks) > 0 else 0
+        dbytes = responses["bytes"].sum() if len(responses) > 0 else 0
 
         rate = pkts / dur if dur > 0 else 0.0
         srate = spkts / dur if dur > 0 else 0.0
         drate = dpkts / dur if dur > 0 else 0.0
 
-        # Diversity features
-        src_counter = Counter(g["saddr"].tolist())
+        # Diversity features - calculate from ATTACK packets only (not responses!)
+        src_counter = Counter(attacks["saddr"].tolist())
         unique_src_count = int(len(src_counter))
         src_entropy = float(shannon_entropy_from_counts(src_counter.values()))
-        top_src_ratio = float(max(src_counter.values()) / pkts) if pkts > 0 else 1.0
+        attack_pkts = len(attacks)
+        top_src_ratio = float(max(src_counter.values()) / attack_pkts) if attack_pkts > 0 else 1.0
         # Defaults per your doc: fill NaN with (1, 0.0, 1.0) for (unique, entropy, top_ratio)
         if unique_src_count <= 0:
             unique_src_count = 1
@@ -416,7 +441,7 @@ def build_22_features(
         rows.append(row)
 
     df_feat = pd.DataFrame(rows)
-    
+
     # Fill missing values with defaults (matching training pipeline)
     # Training used median fill, but for real-time inference we use safe defaults
     numeric_cols = [
@@ -438,6 +463,112 @@ def build_22_features(
             df_feat[col] = df_feat[col].fillna("")
 
     return df_feat
+
+
+def build_per_attacker_features(events: List[EventC], server_ip: str) -> pd.DataFrame:
+    """
+    Build features PER ATTACKER for Stage 3 classification.
+    Instead of aggregating all traffic, this breaks down by Peer IP.
+    """
+    if not events:
+        return pd.DataFrame()
+
+    # Convert to DataFrame
+    df_e = pd.DataFrame([vars(e) for e in events])
+    
+    # Identify Peer IP (The other side of the conversation)
+    # If saddr is server -> peer is daddr. If daddr is server -> peer is saddr.
+    df_e['peer_ip'] = np.where(df_e['saddr'] == server_ip, df_e['daddr'], df_e['saddr'])
+    
+    # Pre-calculate time relative to first packet in batch to keep numbers small
+    t0 = df_e['t_epoch'].min()
+    df_e['stime'] = df_e['t_epoch'] - t0
+    
+    rows = []
+    
+    # Group by Peer IP (Attacker)
+    # Limit to top 1000 active IPs to avoid performance kill during massive DDoS
+    top_peers = df_e['peer_ip'].value_counts().head(1000).index
+    
+    for peer_ip in top_peers:
+        g = df_e[df_e['peer_ip'] == peer_ip]
+        
+        # Separate directions
+        attacks = g[g['daddr'] == server_ip]
+        responses = g[g['saddr'] == server_ip]
+        
+        # Basic counts
+        spkts = len(attacks)
+        dpkts = len(responses)
+        pkts = spkts + dpkts
+        
+        if pkts == 0: continue
+
+        # Bytes (field is 'bytes' in EventC)
+        sbytes = attacks['bytes'].sum() if not attacks.empty else 0
+        dbytes = responses['bytes'].sum() if not responses.empty else 0
+        bytes_ = sbytes + dbytes
+        
+        # Time stats
+        g = g.sort_values('stime')
+        stimes = g['stime'].values
+        
+        dur = 0.0
+        mean_iat = 0.0
+        std_iat = 0.0
+        sum_iat = 0.0
+        min_iat = 0.0
+        max_iat = 0.0
+        
+        if len(stimes) >= 2:
+            dur = float(stimes[-1] - stimes[0])
+            if dur == 0: dur = 0.0001 # Avoid div by zero
+            
+            iat = np.diff(stimes)
+            mean_iat = float(np.mean(iat))
+            std_iat = float(np.std(iat))
+            sum_iat = float(np.sum(iat))
+            min_iat = float(np.min(iat))
+            max_iat = float(np.max(iat))
+        else:
+            dur = 0.0001 # Single packet, practically zero duration
+
+        # Rates
+        rate = pkts / dur
+        srate = spkts / dur
+        drate = dpkts / dur
+        
+        # Build row matching Stage 3 feature set
+        # ['pkts', 'bytes', 'seq', 'dur', 'mean', 'stddev', 'sum', 'min', 'max',
+        #  'spkts', 'dpkts', 'sbytes', 'dbytes', 'rate', 'srate', 'drate']
+        row = {
+            "pkts": pkts,
+            "bytes": bytes_,
+            "seq": 0, # Not available
+            "dur": dur,
+            "mean": mean_iat,
+            "stddev": std_iat,
+            "sum": sum_iat,
+            "min": min_iat,
+            "max": max_iat,
+            "spkts": spkts,
+            "dpkts": dpkts,
+            "sbytes": sbytes,
+            "dbytes": dbytes,
+            "rate": rate,
+            "srate": srate,
+            "drate": drate,
+            # Extra for reporting
+            "_peer_ip": peer_ip
+        }
+        rows.append(row)
+    
+    if not rows:
+        return pd.DataFrame()
+        
+    df = pd.DataFrame(rows)
+    df.to_csv("stag3.csv")
+    return df
 
 
 # -----------------------
@@ -709,24 +840,66 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
                                     attack_types = Counter(y2_mapped)
                                     logger.info(f"Stage 2: {dict(attack_types)}")
                                 
-                                # Stage 3: DDoS variant classification
+                                # Stage 3: DDoS variant classification (Per Attacker Analysis)
                                 y3 = np.full(len(y1), "", dtype=object)
                                 ddos_mask = np.array([str(x).lower() == "ddos" for x in y2])
                                 
                                 if np.any(ddos_mask):
-                                    logger.debug("Running Stage 3 (DDoS Variants)...")
-                                    df_feat_stage3 = extract_stage3_features(completed_windows)
-                                    X_ddos = df_feat_stage3.loc[ddos_mask].values
+                                    logger.debug("Running Stage 3 (DDoS Variants - Per Attacker Analysis)...")
                                     
-                                    dmatrix = xgb.DMatrix(X_ddos, feature_names=df_feat_stage3.columns.tolist())
-                                    y3_pred = stage3.predict(dmatrix)
+                                    # 1. Extract per-attacker features
+                                    df_per_attacker = build_per_attacker_features(window_events, SERVER_IP)
                                     
-                                    # Map numeric predictions to variant names
-                                    y3_variants = label_encoder.inverse_transform(y3_pred.astype(int))
-                                    y3[ddos_mask] = y3_variants
-                                    
-                                    variant_counts = Counter(y3_variants)
-                                    logger.info(f"Stage 3: {dict(variant_counts)}")
+                                    if not df_per_attacker.empty:
+                                        # 2. Select Features for Stage 3
+                                        stage3_features = ['pkts', 'bytes', 'seq', 'dur', 'mean', 'stddev', 
+                                                        'sum', 'min', 'max', 'spkts', 'dpkts', 'sbytes', 
+                                                        'dbytes', 'rate', 'srate', 'drate']
+                                        
+                                        # Ensure columns exist
+                                        for col in stage3_features:
+                                            if col not in df_per_attacker.columns:
+                                                df_per_attacker[col] = 0.0
+                                        
+                                        X_ddos_per = df_per_attacker[stage3_features].values
+                                        
+                                        # 3. Predict (XGBoost)
+                                        dmatrix = xgb.DMatrix(X_ddos_per, feature_names=stage3_features)
+                                        if hasattr(stage3, 'predict'):
+                                            # XGBoost Booster object
+                                            y3_logits = stage3.predict(dmatrix)
+                                            # Check if output is probability (classes > 2) or softprob
+                                            if len(y3_logits.shape) > 1:
+                                                y3_pred_idx = np.argmax(y3_logits, axis=1)
+                                            else:
+                                                # If it's single class / binary, usually rounds to int, but variants are multiclass
+                                                y3_pred_idx = y3_logits.astype(int)
+                                        else:
+                                            # SKLearn wrapper
+                                            y3_pred_idx = stage3.predict(X_ddos_per)
+                                        
+                                        # 4. Map to Class Names
+                                        # Try using LabelEncoder if available
+                                        try:
+                                            y3_text = label_encoder.inverse_transform(y3_pred_idx.astype(int))
+                                        except:
+                                            # Fallback: Hardcoded based on verified classes 0: HTTP, 1: TCP, 2: UDP
+                                            stage3_map = {0: 'HTTP', 1: 'TCP', 2: 'UDP'}
+                                            y3_text = [stage3_map.get(i, f'Unknown-{i}') for i in y3_pred_idx]
+                                        
+                                        # 5. Summary
+                                        y3_counts = Counter(y3_text)
+                                        logger.info(f"Stage 3 (Per Attacker Composition): {dict(y3_counts)}")
+                                        
+                                        # Calculate dominant type
+                                        dominant_type = max(y3_counts, key=y3_counts.get)
+                                        
+                                        # Alert
+                                        victim_ip = list(attack_ips)[0] if attack_ips else SERVER_IP
+                                        logger.warning(f"🚨 ALERT: DDoS-{dominant_type} detected (dst={victim_ip}) from {len(df_per_attacker)} attackers")
+                                        
+                                    else:
+                                        logger.warning("Stage 3: Unable to build per-attacker flows (no valid bidirectional flows)")
                                 
                                 # Update Prometheus metrics
                                 for idx in range(len(completed_windows)):
@@ -780,315 +953,315 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
     logger.info("Detector server stopped")
 
 
-# -----------------------
-# Main
-# -----------------------
-def main():
-    #promethues metric server
-    start_http_server(8000)
-    logger.info("[PROM] Metrics exposed at http://localhost:8000/metrics")
+# # -----------------------
+# # Main
+# # -----------------------
+# def main():
+#     #promethues metric server
+#     start_http_server(8000)
+#     logger.info("[PROM] Metrics exposed at http://localhost:8000/metrics")
 
-    # Auto-detect script directory to handle running from different locations
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+#     # Auto-detect script directory to handle running from different locations
+#     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    ap = argparse.ArgumentParser(
-        description="DDoS Detection with Three-Stage ML Pipeline (PCAP Direct Read)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Basic usage:
-  python detector.py --pcap capture.pcap
+#     ap = argparse.ArgumentParser(
+#         description="DDoS Detection with Three-Stage ML Pipeline (PCAP Direct Read)",
+#         formatter_class=argparse.RawDescriptionHelpFormatter,
+#         epilog="""
+# Examples:
+#   # Basic usage:
+#   python detector.py --pcap capture.pcap
   
-  # With packet limit (recommended for large files):
-  python detector.py --pcap merged.pcap --max-packets 500000
+#   # With packet limit (recommended for large files):
+#   python detector.py --pcap merged.pcap --max-packets 500000
   
-  # With debug output:
-  python detector.py --pcap capture.pcap --max-packets 100000 --debug
+#   # With debug output:
+#   python detector.py --pcap capture.pcap --max-packets 100000 --debug
   
-  # Custom window size:
-  python detector.py --pcap capture.pcap --window 60
-        """
-    )
+#   # Custom window size:
+#   python detector.py --pcap capture.pcap --window 60
+#         """
+#     )
     
-    # Input source arguments
-    input_group = ap.add_argument_group('Input (required)')
-    input_group.add_argument("--pcap", type=str, required=True,
-                             help="Path to PCAP file (required). Can be single capture or merged file.")
-    input_group.add_argument("--max-packets", type=int, default=0, 
-                             help="Limit packets to read (0 = no limit). "
-                                  "Use to control memory: 100K packets ≈ 20MB, 500K ≈ 100MB, 1M ≈ 200MB RAM")
+#     # Input source arguments
+#     input_group = ap.add_argument_group('Input (required)')
+#     input_group.add_argument("--pcap", type=str, required=True,
+#                              help="Path to PCAP file (required). Can be single capture or merged file.")
+#     input_group.add_argument("--max-packets", type=int, default=0, 
+#                              help="Limit packets to read (0 = no limit). "
+#                                   "Use to control memory: 100K packets ≈ 20MB, 500K ≈ 100MB, 1M ≈ 200MB RAM")
     
-    # Model arguments
-    model_group = ap.add_argument_group('Model paths')
-    model_group.add_argument("--encoders", default=os.path.join(script_dir, "results/models/encoders.pkl"), 
-                             help="Path to encoders.pkl")
-    model_group.add_argument("--features", default=os.path.join(script_dir, "results/models/features.pkl"), 
-                             help="Path to features.pkl")
-    model_group.add_argument("--mapping", default=os.path.join(script_dir, "results/models/mapping.pkl"), 
-                             help="Path to mapping.pkl")
-    model_group.add_argument("--stage1", default=os.path.join(script_dir, "results/models/stage1.pkl"), 
-                             help="Path to stage1.pkl")
-    model_group.add_argument("--stage2", default=os.path.join(script_dir, "results/models/stage2.pkl"), 
-                             help="Path to stage2.pkl")
-    model_group.add_argument("--stage3", default=os.path.join(script_dir, "results/models/stage3.json"), 
-                             help="Path to stage3.json")
-    model_group.add_argument("--label-encoder", default=os.path.join(script_dir, "results/models/label_encoder.pkl"), 
-                             help="Path to label_encoder.pkl for Stage 3")
+#     # Model arguments
+#     model_group = ap.add_argument_group('Model paths')
+#     model_group.add_argument("--encoders", default=os.path.join(script_dir, "results/models/encoders.pkl"), 
+#                              help="Path to encoders.pkl")
+#     model_group.add_argument("--features", default=os.path.join(script_dir, "results/models/features.pkl"), 
+#                              help="Path to features.pkl")
+#     model_group.add_argument("--mapping", default=os.path.join(script_dir, "results/models/mapping.pkl"), 
+#                              help="Path to mapping.pkl")
+#     model_group.add_argument("--stage1", default=os.path.join(script_dir, "results/models/stage1.pkl"), 
+#                              help="Path to stage1.pkl")
+#     model_group.add_argument("--stage2", default=os.path.join(script_dir, "results/models/stage2.pkl"), 
+#                              help="Path to stage2.pkl")
+#     model_group.add_argument("--stage3", default=os.path.join(script_dir, "results/models/stage3.json"), 
+#                              help="Path to stage3.json")
+#     model_group.add_argument("--label-encoder", default=os.path.join(script_dir, "results/models/label_encoder.pkl"), 
+#                              help="Path to label_encoder.pkl for Stage 3")
     
-    # Processing arguments
-    proc_group = ap.add_argument_group('Processing options')
-    proc_group.add_argument("--window", type=int, default=WINDOW_SIZE, 
-                            help=f"Time window size in seconds (default: {WINDOW_SIZE}s, matches training)")
-    proc_group.add_argument("--show", type=int, default=20, 
-                            help="Number of sample results to display (default: 20)")
-    proc_group.add_argument("--debug", action="store_true", 
-                            help="Enable debug logging (shows detailed processing info)")
+#     # Processing arguments
+#     proc_group = ap.add_argument_group('Processing options')
+#     proc_group.add_argument("--window", type=int, default=WINDOW_SIZE, 
+#                             help=f"Time window size in seconds (default: {WINDOW_SIZE}s, matches training)")
+#     proc_group.add_argument("--show", type=int, default=20, 
+#                             help="Number of sample results to display (default: 20)")
+#     proc_group.add_argument("--debug", action="store_true", 
+#                             help="Enable debug logging (shows detailed processing info)")
     
-    args = ap.parse_args()
+#     args = ap.parse_args()
     
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
+#     if args.debug:
+#         logger.setLevel(logging.DEBUG)
     
-    logger.info("="*60)
-    logger.info("DDoS DETECTOR - Three-Stage ML Pipeline")
-    logger.info("="*60)
+#     logger.info("="*60)
+#     logger.info("DDoS DETECTOR - Three-Stage ML Pipeline")
+#     logger.info("="*60)
 
-    # Load models/assets
-    logger.info(f"Loading Stage 1 model from: {args.stage1}")
-    stage1 = joblib.load(args.stage1)
+#     # Load models/assets
+#     logger.info(f"Loading Stage 1 model from: {args.stage1}")
+#     stage1 = joblib.load(args.stage1)
     
-    logger.info(f"Loading Stage 2 model from: {args.stage2}")
-    stage2 = joblib.load(args.stage2)
+#     logger.info(f"Loading Stage 2 model from: {args.stage2}")
+#     stage2 = joblib.load(args.stage2)
 
-    logger.info(f"Loading Stage 3 model from: {args.stage3}")
-    stage3 = xgb.Booster()
-    stage3.load_model(args.stage3)
+#     logger.info(f"Loading Stage 3 model from: {args.stage3}")
+#     stage3 = xgb.Booster()
+#     stage3.load_model(args.stage3)
     
-    logger.info(f"Loading label encoder for Stage 3 from: {args.label_encoder}")
-    label_encoder = joblib.load(args.label_encoder)
+#     logger.info(f"Loading label encoder for Stage 3 from: {args.label_encoder}")
+#     label_encoder = joblib.load(args.label_encoder)
 
-    logger.info(f"Loading encoders from: {args.encoders}")
-    encoders = joblib.load(args.encoders)
+#     logger.info(f"Loading encoders from: {args.encoders}")
+#     encoders = joblib.load(args.encoders)
     
-    logger.info(f"Loading features list from: {args.features}")
-    feature_list = joblib.load(args.features)
+#     logger.info(f"Loading features list from: {args.features}")
+#     feature_list = joblib.load(args.features)
     
-    logger.info(f"Loading attack mapping from: {args.mapping}")
-    mapping = joblib.load(args.mapping)
+#     logger.info(f"Loading attack mapping from: {args.mapping}")
+#     mapping = joblib.load(args.mapping)
 
-    # Sanity checks
-    if not isinstance(encoders, dict):
-        raise ValueError("encoders.pkl must be a dict: {col: LabelEncoder}")
+#     # Sanity checks
+#     if not isinstance(encoders, dict):
+#         raise ValueError("encoders.pkl must be a dict: {col: LabelEncoder}")
     
-    logger.debug(f"Encoders loaded for columns: {list(encoders.keys())}")
-    logger.debug(f"Feature list ({len(feature_list)} features): {feature_list}")
-    logger.debug(f"Attack mapping: {mapping}")
+#     logger.debug(f"Encoders loaded for columns: {list(encoders.keys())}")
+#     logger.debug(f"Feature list ({len(feature_list)} features): {feature_list}")
+#     logger.debug(f"Attack mapping: {mapping}")
 
-    # Check Scapy availability
-    if not SCAPY_AVAILABLE:
-        logger.error("="*60)
-        logger.error("ERROR: Scapy is not installed!")
-        logger.error("="*60)
-        logger.error("Scapy is required for PCAP parsing.")
-        logger.error("Install with: pip install scapy")
-        logger.error("")
-        return
+#     # Check Scapy availability
+#     if not SCAPY_AVAILABLE:
+#         logger.error("="*60)
+#         logger.error("ERROR: Scapy is not installed!")
+#         logger.error("="*60)
+#         logger.error("Scapy is required for PCAP parsing.")
+#         logger.error("Install with: pip install scapy")
+#         logger.error("")
+#         return
     
-    # Load events from PCAP file
-    logger.info("="*60)
-    logger.info("PCAP DIRECT READ MODE")
-    logger.info("="*60)
+#     # Load events from PCAP file
+#     logger.info("="*60)
+#     logger.info("PCAP DIRECT READ MODE")
+#     logger.info("="*60)
     
-    limit_packets = None if args.max_packets == 0 else args.max_packets
-    logger.info(f"Input file: {args.pcap}")
-    if limit_packets:
-        logger.info(f"Packet limit: {limit_packets:,}")
-    else:
-        logger.info("Packet limit: None (reading full file)")
+#     limit_packets = None if args.max_packets == 0 else args.max_packets
+#     logger.info(f"Input file: {args.pcap}")
+#     if limit_packets:
+#         logger.info(f"Packet limit: {limit_packets:,}")
+#     else:
+#         logger.info("Packet limit: None (reading full file)")
     
-    try:
-        events, global_t0 = load_events_from_pcap(args.pcap, max_packets=limit_packets)
-    except Exception as e:
-        logger.error(f"Failed to load PCAP file: {e}")
-        return
+#     try:
+#         events, global_t0 = load_events_from_pcap(args.pcap, max_packets=limit_packets)
+#     except Exception as e:
+#         logger.error(f"Failed to load PCAP file: {e}")
+#         return
     
-    if not events:
-        logger.error("No IP packets found in PCAP file. Check file format.")
-        return
+#     if not events:
+#         logger.error("No IP packets found in PCAP file. Check file format.")
+#         return
     
-    # Display PCAP info
-    time_span = events[-1].t_epoch - events[0].t_epoch
-    logger.info(f"")
-    logger.info(f"Parsed {len(events):,} packets from PCAP")
-    logger.info(f"Time range: {events[0].t_epoch:.3f} to {events[-1].t_epoch:.3f}")
-    logger.info(f"Duration: {time_span:.1f}s ({time_span/60:.1f} minutes)")
-    logger.info(f"GLOBAL_T0: {global_t0}")
+#     # Display PCAP info
+#     time_span = events[-1].t_epoch - events[0].t_epoch
+#     logger.info(f"")
+#     logger.info(f"Parsed {len(events):,} packets from PCAP")
+#     logger.info(f"Time range: {events[0].t_epoch:.3f} to {events[-1].t_epoch:.3f}")
+#     logger.info(f"Duration: {time_span:.1f}s ({time_span/60:.1f} minutes)")
+#     logger.info(f"GLOBAL_T0: {global_t0}")
     
-    # Build 22 features from PCAP events
-    logger.info(f"")
-    logger.info(f"Building 22 features with {args.window}s time windows...")
-    df_feat = build_22_features(events, window_size=args.window, global_t0=global_t0)
+#     # Build 22 features from PCAP events
+#     logger.info(f"")
+#     logger.info(f"Building 22 features with {args.window}s time windows...")
+#     df_feat = build_22_features(events, window_size=args.window, global_t0=global_t0)
 
-    if df_feat.empty:
-        logger.error("Feature table empty. Nothing to predict.")
-        return
+#     if df_feat.empty:
+#         logger.error("Feature table empty. Nothing to predict.")
+#         return
     
-    logger.info(f"Generated {len(df_feat):,} time windows for analysis")
+#     logger.info(f"Generated {len(df_feat):,} time windows for analysis")
 
-    # Keep debug cols for later display
-    debug_cols = ["_time_window", "_daddr"] if "_time_window" in df_feat.columns else []
-    df_X = df_feat.copy()
+#     # Keep debug cols for later display
+#     debug_cols = ["_time_window", "_daddr"] if "_time_window" in df_feat.columns else []
+#     df_X = df_feat.copy()
 
-    # Encode categorical
-    logger.info("Encoding categorical features (unknown → -1)...")
-    df_X = apply_label_encoders_unknown_minus_one(df_X, encoders)
+#     # Encode categorical
+#     logger.info("Encoding categorical features (unknown → -1)...")
+#     df_X = apply_label_encoders_unknown_minus_one(df_X, encoders)
 
-    # Align 22 features
-    logger.info(f"Aligning features to match training order ({len(feature_list)} features)...")
-    X = align_features(df_X, feature_list)
+#     # Align 22 features
+#     logger.info(f"Aligning features to match training order ({len(feature_list)} features)...")
+#     X = align_features(df_X, feature_list)
     
-    logger.debug(f"Final feature matrix shape: {X.shape}")
+#     logger.debug(f"Final feature matrix shape: {X.shape}")
 
-    # Stage 1: binary Attack vs Normal
-    logger.info("Running Stage 1: Binary Classification (Attack vs Normal)...")
-    y1 = stage1.predict(X)
-    y1 = np.asarray(y1)
+#     # Stage 1: binary Attack vs Normal
+#     logger.info("Running Stage 1: Binary Classification (Attack vs Normal)...")
+#     y1 = stage1.predict(X)
+#     y1 = np.asarray(y1)
 
-    # Normalize to a boolean mask
-    attack_mask = None
-    if y1.dtype.kind in {"i", "u", "b"}:
-        attack_mask = y1.astype(int) == 1
-    else:
-        # string labels
-        attack_mask = np.array([str(v).lower() not in {"0", "normal", "benign"} for v in y1], dtype=bool)
+#     # Normalize to a boolean mask
+#     attack_mask = None
+#     if y1.dtype.kind in {"i", "u", "b"}:
+#         attack_mask = y1.astype(int) == 1
+#     else:
+#         # string labels
+#         attack_mask = np.array([str(v).lower() not in {"0", "normal", "benign"} for v in y1], dtype=bool)
 
-    # Stage 2: classify attack types
-    y2 = np.array(["-"] * len(X), dtype=object)
-    if attack_mask.any():
-        logger.info(f"Running Stage 2: Multi-class Classification ({attack_mask.sum():,} attacks)...")
-        y2_pred = stage2.predict(X[attack_mask])
-        y2_pred = np.asarray(y2_pred)
-        logger.debug(f"[DEBUG] y2_pred raw (first 5): {y2_pred[:5]}, dtype: {y2_pred.dtype}")
-        y2_labels = map_predictions(y2_pred, mapping)
-        logger.debug(f"[DEBUG] y2_labels after map (first 5): {y2_labels[:5]}")
-        y2[attack_mask] = np.array(y2_labels, dtype=object)
-        logger.debug(f"[DEBUG] y2 after assignment (first 5): {y2[:5]}")
-    else:
-        logger.info("Stage 2 skipped: No attacks detected by Stage 1")
+#     # Stage 2: classify attack types
+#     y2 = np.array(["-"] * len(X), dtype=object)
+#     if attack_mask.any():
+#         logger.info(f"Running Stage 2: Multi-class Classification ({attack_mask.sum():,} attacks)...")
+#         y2_pred = stage2.predict(X[attack_mask])
+#         y2_pred = np.asarray(y2_pred)
+#         logger.debug(f"[DEBUG] y2_pred raw (first 5): {y2_pred[:5]}, dtype: {y2_pred.dtype}")
+#         y2_labels = map_predictions(y2_pred, mapping)
+#         logger.debug(f"[DEBUG] y2_labels after map (first 5): {y2_labels[:5]}")
+#         y2[attack_mask] = np.array(y2_labels, dtype=object)
+#         logger.debug(f"[DEBUG] y2 after assignment (first 5): {y2[:5]}")
+#     else:
+#         logger.info("Stage 2 skipped: No attacks detected by Stage 1")
 
-    # Stage 3: DDoS variant classification (only for DDoS attacks)
-    y3 = np.array(["unknown"] * len(X), dtype=object)
-    ddos_mask = None
+#     # Stage 3: DDoS variant classification (only for DDoS attacks)
+#     y3 = np.array(["unknown"] * len(X), dtype=object)
+#     ddos_mask = None
     
-    if attack_mask.any():
-        # Identify DDoS attacks from Stage 2 output
-        ddos_mask = np.array([str(v).lower() == "ddos" for v in y2], dtype=bool)
+#     if attack_mask.any():
+#         # Identify DDoS attacks from Stage 2 output
+#         ddos_mask = np.array([str(v).lower() == "ddos" for v in y2], dtype=bool)
         
-        if ddos_mask.any():
-            logger.info(f"Running Stage 3: DDoS Variant Classification ({ddos_mask.sum():,} DDoS attacks)...")
+#         if ddos_mask.any():
+#             logger.info(f"Running Stage 3: DDoS Variant Classification ({ddos_mask.sum():,} DDoS attacks)...")
             
-            # Extract 16 features for Stage 3
-            X_stage3 = extract_stage3_features(df_feat)
-            X_stage3_ddos = X_stage3[ddos_mask]
+#             # Extract 16 features for Stage 3
+#             X_stage3 = extract_stage3_features(df_feat)
+#             X_stage3_ddos = X_stage3[ddos_mask]
             
-            # Run Stage 3 prediction (preserve feature names to satisfy XGBoost)
-            dmat_stage3 = xgb.DMatrix(
-                X_stage3_ddos,
-                feature_names=list(X_stage3_ddos.columns)
-            )
-            y3_pred = stage3.predict(dmat_stage3)
-            y3_pred = np.asarray(y3_pred, dtype=int)
-            logger.debug(f"[DEBUG] y3_pred raw (first 5): {y3_pred[:5]}")
+#             # Run Stage 3 prediction (preserve feature names to satisfy XGBoost)
+#             dmat_stage3 = xgb.DMatrix(
+#                 X_stage3_ddos,
+#                 feature_names=list(X_stage3_ddos.columns)
+#             )
+#             y3_pred = stage3.predict(dmat_stage3)
+#             y3_pred = np.asarray(y3_pred, dtype=int)
+#             logger.debug(f"[DEBUG] y3_pred raw (first 5): {y3_pred[:5]}")
             
-            # Convert numeric predictions to variant names using label_encoder
-            y3_variants = label_encoder.inverse_transform(y3_pred)
-            logger.debug(f"[DEBUG] y3_variants after inverse_transform (first 5): {list(y3_variants[:5])}")
+#             # Convert numeric predictions to variant names using label_encoder
+#             y3_variants = label_encoder.inverse_transform(y3_pred)
+#             logger.debug(f"[DEBUG] y3_variants after inverse_transform (first 5): {list(y3_variants[:5])}")
             
-            # Convert to lowercase for consistency
-            y3_labels = [str(variant).lower() for variant in y3_variants]
+#             # Convert to lowercase for consistency
+#             y3_labels = [str(variant).lower() for variant in y3_variants]
             
-            # Assign predictions to output array
-            y3[ddos_mask] = np.array(y3_labels, dtype=object)
-            logger.debug(f"[DEBUG] Assigned {len(y3_labels)} Stage 3 predictions")
-            logger.debug(f"[DEBUG] First 5 DDoS predictions: {y3_labels[:5]}")
-        else:
-            logger.info("Stage 3 skipped: No DDoS attacks detected by Stage 2")
-    else:
-        logger.info("Stage 3 skipped: No attacks detected by Stage 1")
+#             # Assign predictions to output array
+#             y3[ddos_mask] = np.array(y3_labels, dtype=object)
+#             logger.debug(f"[DEBUG] Assigned {len(y3_labels)} Stage 3 predictions")
+#             logger.debug(f"[DEBUG] First 5 DDoS predictions: {y3_labels[:5]}")
+#         else:
+#             logger.info("Stage 3 skipped: No DDoS attacks detected by Stage 2")
+#     else:
+#         logger.info("Stage 3 skipped: No attacks detected by Stage 1")
 
-    # Build output table
-    out = df_feat.copy()
-    out["stage1_pred"] = y1
-    out["stage2_pred"] = y2
-    out["stage3_pred"] = y3
+#     # Build output table
+#     out = df_feat.copy()
+#     out["stage1_pred"] = y1
+#     out["stage2_pred"] = y2
+#     out["stage3_pred"] = y3
 
-    #metric
-    for idx, row in out.iterrows():
-        dst_ip = row["_daddr"]
+#     #metric
+#     for idx, row in out.iterrows():
+#         dst_ip = row["_daddr"]
 
-        # ===== Feature-level metrics =====
-        if np.isfinite(row["rate"]):
-            PACKET_RATE.labels(dst_ip=dst_ip).set(row["rate"])
+#         # ===== Feature-level metrics =====
+#         if np.isfinite(row["rate"]):
+#             PACKET_RATE.labels(dst_ip=dst_ip).set(row["rate"])
 
-        if np.isfinite(row["src_entropy"]):
-            SRC_ENTROPY.labels(dst_ip=dst_ip).set(row["src_entropy"])
+#         if np.isfinite(row["src_entropy"]):
+#             SRC_ENTROPY.labels(dst_ip=dst_ip).set(row["src_entropy"])
 
-        # ===== Prediction-level metrics =====
-        # Stage 1: Normal vs Attack
-        if row["stage1_pred"] == 1:
-            # Get attack type from Stage 2 and variant from Stage 3
-            attack_type_raw = row["stage2_pred"]
-            attack_type = str(attack_type_raw).strip().lower()  # ddos / dos / reconnaissance
+#         # ===== Prediction-level metrics =====
+#         # Stage 1: Normal vs Attack
+#         if row["stage1_pred"] == 1:
+#             # Get attack type from Stage 2 and variant from Stage 3
+#             attack_type_raw = row["stage2_pred"]
+#             attack_type = str(attack_type_raw).strip().lower()  # ddos / dos / reconnaissance
             
-            # Get DDoS variant from Stage 3 (only for DDoS attacks)
-            ddos_variant = "unknown"  # default
-            if attack_type == "ddos":
-                variant_raw = row["stage3_pred"]
-                ddos_variant = str(variant_raw).strip().lower()  # http / tcp / udp / unknown
+#             # Get DDoS variant from Stage 3 (only for DDoS attacks)
+#             ddos_variant = "unknown"  # default
+#             if attack_type == "ddos":
+#                 variant_raw = row["stage3_pred"]
+#                 ddos_variant = str(variant_raw).strip().lower()  # http / tcp / udp / unknown
 
-            ATTACK_WINDOWS.labels(
-                attack_type=attack_type,           # ddos / dos / reconnaissance
-                ddos_variant=ddos_variant,         # http / tcp / udp / unknown
-                dst_ip=dst_ip
-            ).inc()
-        else:
-            NORMAL_WINDOWS.labels(dst_ip=dst_ip).inc()
+#             ATTACK_WINDOWS.labels(
+#                 attack_type=attack_type,           # ddos / dos / reconnaissance
+#                 ddos_variant=ddos_variant,         # http / tcp / udp / unknown
+#                 dst_ip=dst_ip
+#             ).inc()
+#         else:
+#             NORMAL_WINDOWS.labels(dst_ip=dst_ip).inc()
 
 
-    # Print summary
-    logger.info("="*60)
-    logger.info("DETECTION RESULTS")
-    logger.info("="*60)
-    print(f"\n[+] Windows analyzed: {len(out):,} (window={args.window}s)")
-    print(f"[+] Stage 1 distribution: {dict(Counter(out['stage1_pred'].tolist()))}")
-    if attack_mask.any():
-        print(f"[+] Stage 2 distribution: {dict(Counter(out[attack_mask]['stage2_pred'].tolist()))}")
-        # Show Stage 3 distribution if there are DDoS attacks
-        if ddos_mask is not None and ddos_mask.any():
-            print(f"[+] Stage 3 distribution (DDoS variants): {dict(Counter(out[ddos_mask]['stage3_pred'].tolist()))}")
-    else:
-        print("[+] Stage 2: No attacks detected")
+#     # Print summary
+#     logger.info("="*60)
+#     logger.info("DETECTION RESULTS")
+#     logger.info("="*60)
+#     print(f"\n[+] Windows analyzed: {len(out):,} (window={args.window}s)")
+#     print(f"[+] Stage 1 distribution: {dict(Counter(out['stage1_pred'].tolist()))}")
+#     if attack_mask.any():
+#         print(f"[+] Stage 2 distribution: {dict(Counter(out[attack_mask]['stage2_pred'].tolist()))}")
+#         # Show Stage 3 distribution if there are DDoS attacks
+#         if ddos_mask is not None and ddos_mask.any():
+#             print(f"[+] Stage 3 distribution (DDoS variants): {dict(Counter(out[ddos_mask]['stage3_pred'].tolist()))}")
+#     else:
+#         print("[+] Stage 2: No attacks detected")
 
-    # Show top N
-    show_n = max(1, int(args.show))
-    cols_to_show = []
-    if debug_cols:
-        cols_to_show += debug_cols
-    cols_to_show += ["pkts", "rate", "unique_src_count", "src_entropy", "top_src_ratio", "proto", "state", "flgs", "stage1_pred", "stage2_pred", "stage3_pred"]
-    cols_to_show = [c for c in cols_to_show if c in out.columns]
+#     # Show top N
+#     show_n = max(1, int(args.show))
+#     cols_to_show = []
+#     if debug_cols:
+#         cols_to_show += debug_cols
+#     cols_to_show += ["pkts", "rate", "unique_src_count", "src_entropy", "top_src_ratio", "proto", "state", "flgs", "stage1_pred", "stage2_pred", "stage3_pred"]
+#     cols_to_show = [c for c in cols_to_show if c in out.columns]
 
-    print("\n" + "="*60)
-    print(f"SAMPLE RESULTS (Top {show_n})")
-    print("="*60)
-    print(out[cols_to_show].head(show_n).to_string(index=False))
-    print("="*60)
+#     print("\n" + "="*60)
+#     print(f"SAMPLE RESULTS (Top {show_n})")
+#     print("="*60)
+#     print(out[cols_to_show].head(show_n).to_string(index=False))
+#     print("="*60)
     
-    logger.info("Detection completed successfully!")
+#     logger.info("Detection completed successfully!")
 
-    logger.info("[PROM] Waiting for Prometheus scrape...")
-    while True:
-        time.sleep(5)
+#     logger.info("[PROM] Waiting for Prometheus scrape...")
+#     while True:
+#         time.sleep(5)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

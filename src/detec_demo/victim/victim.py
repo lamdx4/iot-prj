@@ -160,8 +160,8 @@ class VictimServer:
             logger.info(f"  HTTP endpoint: http://{get_local_ip_address()}:{self.http_port}/")
         except PermissionError:
             logger.error(f"✗ Cannot start HTTP server on port {self.http_port} (need sudo)")
-            logger.error(f"  Run with: sudo python3 main.py --interface {self.interface} --enable-http")
-            self.enable_http = False
+            logger.error(f"  Run with: sudo python3 victim.py --interface {self.interface} --enable-http")
+            self.enable_http = True
         except OSError as e:
             logger.error(f"✗ HTTP server error: {e}")
             self.enable_http = False
@@ -202,12 +202,30 @@ class VictimServer:
         try:
             logger.debug(f"Starting capture: count={count}, timeout={timeout}s")
             
+            # Get server IP for BPF filter
+            import socket
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                server_ip = s.getsockname()[0]
+                s.close()
+            except:
+                server_ip = None
+            
+            # BPF filter to capture packets involving server (BIDIRECTIONAL)
+            # "host X" captures both "dst host X" AND "src host X"
+            bpf_filter = f"host {server_ip}" if server_ip else None
+            
+            logger.debug(f"BPF filter: {bpf_filter}")
+            
             packets = sniff(
                 iface=self.interface,
-                prn=None,              # Don't print each packet
-                count=count,           # Max packets
-                timeout=timeout,       # Max time
-                store=True             # Store packets in memory
+                filter=bpf_filter,       # Capture incoming to server
+                prn=None,                # Don't print each packet
+                count=count,             # Max packets
+                timeout=timeout,         # Max time
+                store=True,              # Store packets in memory
+                promisc=True             # Promiscuous mode for better capture
             )
             
             return list(packets) if packets else []
@@ -303,7 +321,7 @@ def print_packet_summary(packets: List) -> None:
 # -----------------------
 # Entry Point
 # -----------------------
-def victim_server_main(output_queue: Queue, interface: str = "eth0", enable_http: bool = False, http_port: int = 80) -> None:
+def victim_server_main(output_queue: Queue, interface: str = "eth0", enable_http: bool = True, http_port: int = 80) -> None:
     """
     Entry point for victim server process
     
@@ -379,7 +397,7 @@ if __name__ == "__main__":
     VictimConfig.BATCH_COUNT = args.count
     
     from multiprocessing import Queue
-    test_queue = Queue(maxsize=20)
+    test_queue = Queue(maxsize=500)
     
     server = VictimServer(test_queue, interface=args.interface)
     server.run()

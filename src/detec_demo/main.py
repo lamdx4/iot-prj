@@ -91,9 +91,8 @@ Note: Requires sudo for packet capture!
     
     parser.add_argument(
         "--interface", "-i",
-        default="lo",
-        help="Network interface for packet capture (default: lo for loopback testing)"
-    )
+        default="wlp1s0",  # Changed from "lo" to support --rand-source
+        help="Network interface for packet capture (default: wlp1s0 for WiFi)\n")
     parser.add_argument(
         "--models", "-m",
         default="./detector/results/models",
@@ -168,7 +167,7 @@ Note: Requires sudo for packet capture!
         sys.exit(1)
     
     # Create shared queue
-    shared_queue = Queue(maxsize=args.queue_size)
+    shared_queue = Queue(maxsize=500)
     logger.info(f"Created shared queue (maxsize={args.queue_size})")
     
     # Start victim process (packet capture)
