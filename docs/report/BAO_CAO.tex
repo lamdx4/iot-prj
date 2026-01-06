@@ -1309,22 +1309,24 @@ Hệ thống demo phân tích theo lô (batch replay) các file flow xuất từ
 \subsection{Kiến trúc hệ thống demo}
 
 \subsubsection{Tổng quan kiến trúc}
-Detector (3-stage ML pipeline) \textrightarrow{} Prometheus (time-series storage) \textrightarrow{} Grafana (dashboard). Dữ liệu đầu vào là flow đã ghi sẵn, được replay theo lô.
+Hệ thống hoạt động theo thời gian thực với luồng dữ liệu: Victim (packet capture) \textrightarrow{} Queue (inter-process communication) \textrightarrow{} Detector (3-stage ML pipeline) \textrightarrow{} Prometheus (time-series storage) \textrightarrow{} Grafana (dashboard). Các thành phần được triển khai trong cùng mạng LAN để mô phỏng kịch bản tấn công thực tế.
 
 \subsubsection{Các thành phần hệ thống}
 \begin{itemize}
-    \item \textbf{Detector (host)}: Đọc flow files, chạy 3 stage, export metrics.
-    \item \textbf{Prometheus (container)}: Thu thập/lưu trữ metrics tại \texttt{http://localhost:9090}.
-    \item \textbf{Grafana (container)}: Truy vấn Prometheus, hiển thị dashboard tại \texttt{http://localhost:3000}.
-    \item \textbf{Victim (container)}: Mô phỏng máy đích bị tấn công (phục vụ demo).
-    \item \textbf{Attacker (container)}: Mô phỏng máy tấn công (phục vụ demo).
+    \item \textbf{Attacker}: Máy tấn công trong cùng LAN, sử dụng các công cụ như \texttt{hping3}, \texttt{slowhttptest}, \texttt{scapy} để thực hiện các cuộc tấn công DDoS (HTTP Flood, TCP SYN Flood, UDP Flood).
+    \item \textbf{Victim Server}: Máy chủ đích trong cùng LAN, chạy service capture traffic bằng Scapy và đưa packets vào multiprocessing Queue. Có thể bật HTTP server để tiếp nhận HTTP Flood attacks.
+    \item \textbf{Detector Server}: Nhận real-time packets từ Queue, xử lý qua 3-stage ML pipeline (Stage 1: Attack vs Normal, Stage 2: Attack Type, Stage 3: DDoS Variants), và export metrics sang Prometheus qua HTTP endpoint.
+    \item \textbf{Prometheus (container)}: Thu thập và lưu trữ time-series metrics từ Detector tại \texttt{http://localhost:9090}.
+    \item \textbf{Grafana (container)}: Truy vấn Prometheus và hiển thị real-time dashboard tại \texttt{http://localhost:3000}.
 \end{itemize}
 
-\subsubsection{Luồng dữ liệu}
+\subsubsection{Luồng dữ liệu thời gian thực}
 \begin{itemize}
-    \item Input: \texttt{flows\_c.txt}, \texttt{flows\_s.txt} (Argus flows).
-    \item Xử lý: Detector đọc batch, suy luận 3 stage, đẩy metrics sang Prometheus.
-    \item Hiển thị: Grafana truy vấn PromQL và hiển thị kết quả batch gần nhất.
+    \item \textbf{Capture}: Victim server sniff packets trên network interface (e.g., \texttt{eth0}, \texttt{wlan0}) bằng Scapy, thu thập theo batch (mặc định 1000 packets hoặc 30 giây timeout).
+    \item \textbf{Inter-Process Communication}: Packets được gửi qua multiprocessing Queue từ Victim process sang Detector process (max queue size: 20 batches).
+    \item \textbf{Feature Engineering}: Detector chuyển packets thành EventC objects, tính toán 22 features theo time windows (30 giây), bao gồm: packet rate, source entropy, bidirectional statistics, TCP flags, v.v.
+    \item \textbf{Classification}: Mỗi time window qua 3-stage pipeline để phát hiện và phân loại tấn công.
+    \item \textbf{Monitoring}: Metrics được cập nhật theo từng window và hiển thị trên Grafana dashboard (packet rate, source entropy, attack counts).
 \end{itemize}
 
 \subsection{Prometheus Metrics Specification}
@@ -1368,158 +1370,159 @@ sum(ddos_attack_windows_total)
 \subsection{Grafana Dashboard Configuration}
 
 \subsubsection{Tổng quan Dashboard}
-Dashboard “DDoS Detection Monitoring” hiển thị kết quả batch gần nhất. Auto-refresh chỉ để cập nhật khi có lượt replay mới.
+Dashboard "DDoS Detection Real-time Monitoring" hiển thị kết quả phát hiện theo thời gian thực với 5 panels chính. Dashboard tự động cập nhật để theo dõi attack patterns liên tục.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{grafana_sc/Pannel_Overview.png}
-    \caption{Tổng quan dashboard}
+    \caption{Tổng quan dashboard 5 panels}
     \label{fig:ddos_dashboard_overview}
 \end{figure}
 
-Nhận xét: Dashboard cung cấp 3 layers thông tin:
+Nhận xét: Dashboard mới được tối ưu hóa với 5 panels:
 \begin{itemize}
-    \item \textbf{Overview layer} (Stat panels): Traffic Classification Results, Attack Detection Rate
-    \item \textbf{Distribution layer} (Charts): Attack Type Distribution, DDoS Variants Distribution, Attack Classification Breakdown
-    \item \textbf{Technical layer} (Gauges): Source IP Entropy, Packet Rate per IP
+    \item \textbf{Panel 1 - Overview}: 5 stat cards hiển thị tổng quan tức thì (Total Attacks, DDoS, DoS, Normal, Reconnaissance)
+    \item \textbf{Panel 2 - Attack Timeline}: Time series theo dõi attack rate theo thời gian (attacks/minute)
+    \item \textbf{Panel 3 - DDoS Variant Breakdown}: Donut chart phân tích các biến thể DDoS (HTTP/TCP/UDP)
+    \item \textbf{Panel 4 - Attack Type Distribution}: Bar chart phân bố loại tấn công (Stage 2 results)
+    \item \textbf{Panel 5 - Attack vs Normal}: Pie chart so sánh tổng thể attack vs normal traffic
 \end{itemize}
-Bố cục này cho phép operator đánh giá nhanh từ tổng quan đến chi tiết sau mỗi lần replay batch.
+Bố cục này cho phép operator nắm bắt toàn diện từ tổng quan đến chi tiết trong real-time monitoring.
 
-\subsubsection{Traffic Classification Results (Stat)}
+\subsubsection{Panel 1: Overview (Stat Cards)}
 \begin{verbatim}
-sum(ddos_normal_windows_total)
-sum(ddos_attack_windows_total{attack_type="dos"})
-sum(ddos_attack_windows_total{attack_type="ddos"})
-sum(ddos_attack_windows_total{attack_type="reconnaissance"})
+Total Attacks Detected:
+  sum(ddos_attack_windows_total)
+DDoS Attacks:
+  sum(ddos_attack_windows_total{attack_type="ddos"})
+DoS Attacks:
+  sum(ddos_attack_windows_total{attack_type="dos"})
+Normal Windows:
+  sum(ddos_normal_windows_total)
+Reconnaissance Attacks:
+  sum(ddos_attack_windows_total{attack_type="reconnaissance"})
 \end{verbatim}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.75\textwidth]{grafana_sc/Traffic_Classification_Results.png}
-    \caption{Traffic Classification Results}
-    \label{fig:traffic_classification_results}
+    \includegraphics[width=0.9\textwidth]{grafana_sc/Overview.png}
+    \caption{Overview - 5 Stat Cards}
+    \label{fig:overview_stats}
 \end{figure}
-Nhận xét: Panel này cung cấp cái nhìn tổng quan nhanh chóng về phân bố traffic. Từ ảnh có thể thấy:
+Nhận xét: Panel này cung cấp snapshot tức thì của tình hình hệ thống với 5 metrics chính:
 \begin{itemize}
-    \item DoS chiếm tỷ lệ cao nhất (17,851 windows - màu orange)
-    \item DDoS: 697 windows (màu đỏ)
-    \item Reconnaissance: 270 windows (màu vàng)
-    \item Normal: 627 windows (màu xanh)
+    \item \textbf{Total Attacks Detected}: Tổng số cửa sổ tấn công mà Stage 1 phát hiện được, KPI quan trọng nhất để đánh giá attack volume
+    \item \textbf{DDoS Attacks}: Số cửa sổ tấn công phân tán từ nhiều nguồn (Stage 2 classify DDoS)
+    \item \textbf{DoS Attacks}: Số cửa sổ tấn công từ ít nguồn (Stage 2 classify DoS)
+    \item \textbf{Normal Windows}: Số cửa sổ traffic bình thường (Stage 1 classify Normal)
+    \item \textbf{Reconnaissance Attacks}: Số cửa sổ quét thông tin (Stage 2 classify Recon)
 \end{itemize}
-Dataset demo chủ yếu chứa các mẫu tấn công; traffic bình thường chỉ 3.3\%. Stat panel này rất hữu ích để nhanh chóng đánh giá tình hình tổng thể.
+Stat cards cho phép operator nhanh chóng đánh giá attack landscape trong vài giây. Màu sắc phân biệt rõ ràng giúp ưu tiên xử lý.
 
-\subsubsection{Attack Type Distribution (Bar Chart, Stage 2)}
+\subsubsection{Panel 2: Attack Timeline (Time Series)}
 \begin{verbatim}
-sum by (attack_type) (ddos_attack_windows_total)
+sum by (attack_type) (rate(ddos_attack_windows_total[1m]))
 \end{verbatim}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{grafana_sc/Attack_Type_Distribution_(Stage2).png}
-    \caption{Attack Type Distribution (Stage 2)}
-    \label{fig:attack_type_distribution}
+    \includegraphics[width=0.9\textwidth]{grafana_sc/Attack Timeline.png}
+    \caption{Attack Timeline - Real-time Attack Rate}
+    \label{fig:attack_timeline}
 \end{figure}
-Nhận xét: Bar chart này hiển thị kết quả từ Stage 2 (phân loại loại tấn công). Chiều cao các cột cho thấy sự chênh lệch rõ rệt:
+Nhận xét: Time series này hiển thị attack rate (attacks per second) theo thời gian với stacked area visualization. Mỗi attack type có màu riêng để dễ phân biệt:
 \begin{itemize}
-    \item DoS (màu vàng): áp đảo tập dữ liệu
-    \item DDoS (màu đỏ): tỷ lệ thấp hơn DoS nhiều lần
-    \item Reconnaissance: tỷ lệ nhỏ nhất
+    \item \textbf{DoS}: Thường chiếm phần lớn diện tích khi có DoS attacks
+    \item \textbf{DDoS}: Spike khi có DDoS campaigns từ nhiều nguồn
+    \item \textbf{Reconnaissance}: Baseline thấp, spike ngắn khi có port scanning
 \end{itemize}
-Màu sắc phân biệt rõ ràng giúp operator nhanh chóng nhận biết loại tấn công chủ đạo. Visualization này là đặc biệt hữu ích để đánh giá attack pattern trong dataset replay.
+Query sử dụng \texttt{rate()} với 1-minute window để smooth out noise và hiển thị trend rõ ràng. Panel này rất hữu ích để:
+\begin{itemize}
+    \item Phát hiện attack waves (các đợt tấn công lặp lại)
+    \item So sánh cường độ tấn công giữa các thời điểm
+    \item Xác định thời điểm peak attack để điều tra nguyên nhân
+\end{itemize}
+Operator có thể zoom in/out timeline để phân tích chi tiết hoặc xem tổng quan dài hạn.
 
-\subsubsection{DDoS Variants Distribution (Donut, Stage 3)}
+\subsubsection{Panel 3: DDoS Variant Breakdown (Donut Chart)}
 \begin{verbatim}
-sum by (ddos_variant) (ddos_attack_windows_total{attack_type="ddos"})
+sum by (ddos_variant) (increase(ddos_attack_windows_total{attack_type="ddos"}[5m]))
 \end{verbatim}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.75\textwidth]{grafana_sc/DDoS_Variants_Distribution_(Stage3).png}
-    \caption{DDoS Variants Distribution (Stage 3)}
-    \label{fig:ddos_variants_distribution}
+    \includegraphics[width=0.75\textwidth]{grafana_sc/DDoS Variant Breakdown.png}
+    \caption{DDoS Variant Breakdown - Stage 3 Results}
+    \label{fig:ddos_variant_breakdown}
 \end{figure}
-Nhận xét: Donut chart thể hiện phân bố các biến thể DDoS từ Stage 3. Từ ảnh có thể thấy:
+Nhận xét: Donut chart này thể hiện phân bố các biến thể DDoS trong 5 phút gần nhất, trực quan hóa kết quả từ Stage 3 classifier:
 \begin{itemize}
-    \item TCP: ~32.1\% (tỷ lệ cao nhất)
-    \item Normal (unclassified): ~30.4\% (các flow không phân loại được)
-    \item UDP: ~19.1\%
-    \item HTTP: ~18.4\%
+    \item \textbf{HTTP}: DDoS-HTTP floods (slowloris, HTTP GET floods)
+    \item \textbf{TCP}: DDoS-TCP attacks (SYN floods, ACK floods)
+    \item \textbf{UDP}: DDoS-UDP floods (UDP amplification, random UDP)
 \end{itemize}
-Tỷ lệ Normal cao là do model Stage 3 được train trên Bot-IoT CSV (có port info rõ ràng) nhưng inference trên Argus aggregated flows (port info bị mở). Donut chart visualization giúp dễ dàng so sánh tỷ lệ giữa các variants.
+Query sử dụng \texttt{increase()} với 5-minute window để tính số attack windows mới trong khoảng thời gian gần đây, filter chỉ lấy \texttt{attack\_type="ddos"}. Visualization này giúp:
+\begin{itemize}
+    \item Xác định attack vector chủ đạo để áp dụng mitigation strategy phù hợp
+    \item So sánh tỷ lệ giữa các variants (ví dụ: nếu HTTP chiếm 80\% thì ưu tiên protect web server)
+    \item Phát hiện multi-vector attacks (khi cả 3 variants đều có tỷ lệ đáng kể)
+\end{itemize}
+Màu sắc phân biệt rõ ràng giúp operator nhanh chóng nhận diện variant nguy hiểm nhất.
 
-\subsubsection{Packet Rate per Destination IP (Bar Gauge)}
+\subsubsection{Panel 4: Attack Type Distribution (Bar Chart)}
 \begin{verbatim}
-avg(ddos_packet_rate) by (dst_ip) > 0.5
+sum by (attack_type) (increase(ddos_attack_windows_total[5m]))
 \end{verbatim}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.75\textwidth]{grafana_sc/Packet_Rate_per_Destination_IP.png}
-    \caption{Packet Rate per Destination IP}
-    \label{fig:packet_rate_per_dst}
+    \includegraphics[width=0.8\textwidth]{grafana_sc/Attack Type Distribution.png}
+    \caption{Attack Type Distribution - Stage 2 Results}
+    \label{fig:attack_type_distribution_new}
 \end{figure}
-Nhận xét: Bar gauge này hiển thị cường độ tấn công theo từng destination IP với gradient color từ xanh → vàng → cam → đỏ. Thresholds:
+Nhận xét: Bar chart này hiển thị kết quả từ Stage 2 (phân loại loại tấn công) trong 5 phút gần nhất. Chiều cao các cột thể hiện số attack windows phát hiện được:
 \begin{itemize}
-    \item Green (<0.5 pps): Normal traffic
-    \item Yellow (0.5--2 pps): DoS attack
-    \item Orange (2--10 pps): DDoS medium intensity
-    \item Red (>10 pps): DDoS high intensity
+    \item \textbf{DoS}: Single-source attacks, thường có bar cao nhất vì dễ thực hiện
+    \item \textbf{DDoS}: Distributed attacks, bar cao cho thấy có botnet hoạt động
+    \item \textbf{Reconnaissance}: Scanning/probing, bar thấp nhưng là early warning
 \end{itemize}
-Từ ảnh có thể thấy hầu hết IPs có packet rate ở mức yellow-orange (0.5--10 pps), cho thấy có cả DoS và DDoS attacks. Một số IPs đạt mức orange-red (>10 pps) cho thấy tấn công DDoS cường độ cao. Panel này rất hữu ích để xác định target IPs đang chịu tấn công mạnh nhất và ưu tiên xử lý.
+Query sử dụng \texttt{increase()} với 5-minute window tương tự Panel 3, nhưng group by \texttt{attack\_type} thay vì \texttt{ddos\_variant}. Visualization này hữu ích để:
+\begin{itemize}
+    \item So sánh nhanh volume giữa DoS, DDoS, Reconnaissance
+    \item Phát hiện shift trong attack strategy (ví dụ: từ DoS sang DDoS)
+    \item Ưu tiên response team (DDoS có priority cao hơn DoS vì impact rộng hơn)
+\end{itemize}
+Bar chart dễ đọc hơn pie chart khi cần so sánh chính xác giữa các categories.
 
-\subsubsection{Source IP Entropy (Gauge)}
+\subsubsection{Panel 5: Attack vs Normal (Pie Chart)}
 \begin{verbatim}
-topk(15, max(ddos_src_entropy) by (dst_ip) > 1)
+Attack Windows:
+  sum(increase(ddos_attack_windows_total[5m]))
+Normal Windows:
+  sum(increase(ddos_normal_windows_total[5m]))
 \end{verbatim}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.75\textwidth]{grafana_sc/Source_IP_Entropy.png}
-    \caption{Source IP Entropy}
-    \label{fig:source_ip_entropy}
+    \includegraphics[width=0.75\textwidth]{grafana_sc/Attack vs Normal.png}
+    \caption{Attack vs Normal - Binary Classification Overview}
+    \label{fig:attack_vs_normal}
 \end{figure}
-Nhận xét: Gauge này đo độ phân tán của source IPs, là metric quan trọng để phân biệt DDoS vs DoS. Giá trị entropy được đánh giá theo thresholds:
+Nhận xét: Pie chart này cung cấp high-level view của Stage 1 binary classifier trong 5 phút gần nhất. Chỉ có 2 segments:
 \begin{itemize}
-    \item Green (<1.5): DoS/Normal - ít nguồn tấn công
-    \item Yellow (1.5--3): DDoS medium scale - độ phân tán trung bình
-    \item Red (>3): DDoS high scale - nhiều nguồn phân tán
+    \item \textbf{Attack Windows}: Tổng tất cả attack windows (DDoS + DoS + Reconnaissance)
+    \item \textbf{Normal Windows}: Traffic bình thường không có dấu hiệu tấn công
 \end{itemize}
-Giá trị entropy cao cho thấy nhiều địa chỉ IP khác nhau tham gia tấn công (đặc trưng của DDoS), trong khi giá trị thấp cho thấy tấn công từ ít nguồn (DoS hoặc normal traffic). Từ ảnh có thể thấy một số destination IPs có entropy ở mức yellow-red (>1.5), xác nhận đây là tấn công phân tán. Panel này bổ sung thông tin quan trọng cho việc phân loại attack type.
-
-\subsubsection{Attack Classification Breakdown (Pie)}
-\begin{verbatim}
-sum(ddos_normal_windows_total)
-sum(ddos_attack_windows_total{attack_type="dos"})
-sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="http"})
-sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="tcp"})
-sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="udp"})
-sum(ddos_attack_windows_total{attack_type="ddos",ddos_variant="normal"})
-sum(ddos_attack_windows_total{attack_type="reconnaissance"})
-\end{verbatim}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{grafana_sc/Attack_Classification_Breakdown.png}
-    \caption{Attack Classification Breakdown}
-    \label{fig:attack_classification_breakdown}
-\end{figure}
-Nhận xét: Pie chart này cung cấp phân tích chi tiết nhất với 7 categories, kết hợp cả 3 stages. Từ ảnh có thể thấy:
+Tỷ lệ giữa hai segments cho thấy mức độ nghiêm trọng:
 \begin{itemize}
-    \item DoS (màu xám): chiếm phần lớn diện tích (~93\%)
-    \item DDoS HTTP (màu đỏ): khoảng 18.4\%
-    \item DDoS TCP (màu light-blue): khoảng 32.1\%
-    \item DDoS UDP (màu vàng): khoảng 19.1\%
-    \item DDoS Normal (màu dark-gray): khoảng 30.4\% (unclassified)
-    \item Reconnaissance (màu light-orange): khoảng 1.4\%
-    \item Normal (màu light-purple): khoảng 3.3\%
+    \item Normal > 90\%: Hệ thống an toàn, chỉ có noise traffic
+    \item Attack 50--90\%: Đang bị tấn công, cần monitoring sát
+    \item Attack > 90\%: Đang bị tấn công nặng, cần kích hoạt mitigation ngay
 \end{itemize}
-Màu sắc phân biệt rõ ràng giữa các loại tấn công. Sự phân bố này giúp đánh giá tổng thể về composition của traffic trong dataset và cho thấy effectiveness của cả 3-stage pipeline.
+Query sử dụng \texttt{increase()} với 5-minute window để tính tổng số windows mới. Panel này là first checkpoint để đánh giá overall security posture. Nếu pie chart toàn màu đỏ, operator biết ngay hệ thống đang under attack và cần xem các panels chi tiết (2, 3, 4) để hiểu rõ attack type và variant.
 
-\subsubsection{Attack Detection Rate (Stat, Stage 1)}
-\begin{verbatim}
-sum(ddos_attack_windows_total)
-\end{verbatim}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.75\textwidth]{grafana_sc/Attack_Detection_Rate_(Stage1).png}
-    \caption{Attack Detection Rate (Stage 1)}
-    \label{fig:attack_detection_rate}
-\end{figure}
-Nhận xét: Panel này hiển thị KPI quan trọng nhất - tổng số cửa sổ tấn công mà Stage 1 phát hiện được. Từ ảnh có thể thấy con số 18,818 attack windows (trong tổng ~19,174 windows), cho thấy khả năng phát hiện rất tốt của Stage 1 binary classifier với detection rate ~98\%. Chỉ có 627 windows được classify là Normal (~3.3\%). Đây là metric đầu tiên mà operator cần xem để đánh giá tổng thể tình hình tấn công trong dataset replay.
+\subsubsection{Tổng kết về Dashboard}
+\begin{itemize}
+    \item Dashboard tối ưu với 5 panels chính: Overview (5 stat cards), Attack Timeline, DDoS Variant Breakdown, Attack Type Distribution, Attack vs Normal.
+    \item Real-time monitoring: tự động cập nhật với \texttt{rate()} và \texttt{increase()} queries.
+    \item Màu sắc phân biệt rõ ràng giúp ưu tiên xử lý nhanh: đỏ (critical) > cam (warning) > vàng (attention) > xanh (normal).
+    \item Workflow: Panel 5 (tổng quan) → Panel 1 (chi tiết metrics) → Panel 2 (timeline) → Panel 4 (attack type) → Panel 3 (DDoS variants).
+\end{itemize}
 
 \subsubsection{Tổng kết về Dashboard}
 \begin{itemize}
