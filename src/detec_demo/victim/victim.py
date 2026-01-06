@@ -263,10 +263,10 @@ class VictimServer:
                     self.output_queue.put(batch_data, timeout=5)
                     self.total_packets += len(packets)
                     
-                    logger.info(
-                        f"Batch {self.batch_id}: "
-                        f"{len(packets)} packets sent (Total: {self.total_packets})"
-                    )
+                    # logger.info(
+                    #     f"Batch {self.batch_id}: "
+                    #     f"{len(packets)} packets sent (Total: {self.total_packets})"
+                    # )
                     
                 except Exception as e:
                     logger.warning(f"Queue full or error: {e}")

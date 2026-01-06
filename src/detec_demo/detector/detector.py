@@ -629,7 +629,7 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
                 if current_window > last_window_processed:
                     # Process ALL completed windows up to current_window - 1
                     for window_to_process in range(last_window_processed + 1, current_window):
-                        logger.info(f"⏰ Window {window_to_process} complete! Processing buffered events...")
+                        logger.info(f"\n⏰ Window {window_to_process} complete! Processing buffered events...")
                         
                         # Filter events for this specific window
                         window_events = [e for e in events_buffer 
@@ -639,7 +639,7 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
                             logger.warning(f"No events found for window {window_to_process}")
                             continue
                         
-                        logger.info(f"Processing {len(window_events)} events for window {window_to_process}")
+                        # Removed duplicate log
                         
                         # Extract 22 features from window events
                         df_feat = build_22_features(window_events, window_size=WINDOW_SIZE, global_t0=global_t0)
@@ -653,6 +653,9 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
                                 
                                 # Apply encoders
                                 completed_windows = apply_label_encoders_unknown_minus_one(completed_windows, encoders)
+                                
+                                # Save destination IPs BEFORE align_features (which removes non-feature columns)
+                                dst_ips = completed_windows['_daddr'].values.copy() if '_daddr' in completed_windows.columns else np.array(['unknown'] * len(completed_windows))
                                 
                                 # Align features
                                 completed_windows = align_features(completed_windows, feature_list)
@@ -668,7 +671,30 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
                                 normal_count = np.sum(~attack_mask)
                                 attack_count = np.sum(attack_mask)
                                 
-                                logger.info(f"Stage 1: Normal={normal_count}, Attack={attack_count}")
+                                # Count unique destination IPs for each category
+                                normal_ips = set(dst_ips[~attack_mask]) if normal_count > 0 else set()
+                                attack_ips = set(dst_ips[attack_mask]) if attack_count > 0 else set()
+                                
+                                # Calculate total packets and source diversity
+                                total_pkts = int(completed_windows['pkts'].sum()) if 'pkts' in completed_windows.columns else 0
+                                
+                                # Get source diversity for attack flows
+                                attack_src_summary = ""
+                                if attack_count > 0:
+                                    attack_src_counts = completed_windows[attack_mask]['unique_src_count'].values if 'unique_src_count' in completed_windows.columns else []
+                                    if len(attack_src_counts) > 0:
+                                        total_attack_sources = int(attack_src_counts.sum())
+                                        attack_src_summary = f" from {total_attack_sources:,} unique source IPs"
+                                
+                                logger.info(f"""
+                                    {'='*70}
+                                    📊 WINDOW {window_to_process} SUMMARY
+                                    {'='*70}
+                                    Total Flows: {len(completed_windows)} (aggregated by destination IP)
+                                    Total Packets: {total_pkts:,}
+                                    ✅ Normal:  {normal_count} flows ({len(normal_ips)} dest IPs)
+                                    ⚠️  Attack:  {attack_count} flows ({len(attack_ips)} dest IPs){attack_src_summary}
+                                    {'='*70}""")
                                 
                                 # Stage 2: Attack type classification
                                 y2 = np.full(len(y1), "", dtype=object)
@@ -704,7 +730,7 @@ def detector_server_main(input_queue: Queue, models_path: str = "./results/model
                                 
                                 # Update Prometheus metrics
                                 for idx in range(len(completed_windows)):
-                                    dst_ip = completed_windows.iloc[idx].get("_daddr", "unknown")
+                                    dst_ip = dst_ips[idx]
                                     
                                     # Feature-level metrics
                                     if np.isfinite(completed_windows.iloc[idx].get("rate", 0)):

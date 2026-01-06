@@ -1,2 +1,4 @@
-# Thêm --rand-source vào
-sudo hping3 -S -p 8080 --flood --rand-source 127.0.0.1
+sudo hping3 -S -p 80 --flood 127.0.0.1
+
+# Thêm cờ --rand-source
+sudo hping3 -S -p 80 --flood --rand-source 127.0.0.1

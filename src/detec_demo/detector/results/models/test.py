@@ -5,12 +5,12 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 2. Nối với tên file pkl (giả sử file pkl nằm CÙNG thư mục với file code)
-file_path = os.path.join(current_dir, 'encoders.pkl')
+file_path = os.path.join(current_dir, 'label_encoder.pkl')
 
 
 le = joblib.load(file_path) # {'flgs': LabelEncoder(), 'proto': LabelEncoder(), 'state': LabelEncoder()}
 
-print(le)
+print(le.classes_)
 
 le_proto = le['state'] 
 print("Các loại giao thức:", le_proto.classes_)
